@@ -1,0 +1,65 @@
+# Variaveis de ambiente e segredos
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!.env.*.example
+!**/.env.*.example
+
+# Documentacao interna de escopo (mantem os READMEs)
+*.md
+!README.md
+!**/README.md
+
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Builds, caches e cobertura
+dist/
+build/
+coverage/
+.cache/
+.expo/
+.vite/
+*.tsbuildinfo
+
+# Logs e arquivos temporarios
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+
+# Arquivos locais de IDE e sistema operacional
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+
+# Artefatos, uploads e backups locais
+artifacts/
+uploads/
+**/uploads/
+*.zip
+*.tar
+*.tar.gz
+
+# Credenciais de aplicativos moveis
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+
+# Pastas nativas geradas pelo Expo
+mobile/android/
+mobile/ios/

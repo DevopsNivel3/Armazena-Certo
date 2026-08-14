@@ -1,0 +1,19 @@
+{
+  "name": "Armazena Certo",
+  "short_name": "Armazena Certo",
+  "description": "Contagem de inventários online e offline.",
+  "start_url": "/inventarios?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

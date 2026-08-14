@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend API for Inventory Management System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "usergenerate": "node create-admin.js",
+    "migrate:expedicao": "node migrate_expedicao_embarque.js",
+    "migrate:expedicao-itens": "node migrate_expedicao_itens.js",
+    "migrate:expedicao-conferente": "node migrate_expedicao_conferente.js",
+    "migrate:expedicao-historico": "node migrate_expedicao_historico.js",
+    "migrate:contagem-offline": "node migrate_contagem_offline.js",
+    "migrate:expedicao-liberacao": "node migrate_expedicao_liberacao.js",
+    "migrate:expedicao-recontagem": "node migrate_expedicao_recontagem.js",
+    "migrate:expedicao-retorno": "node migrate_expedicao_retorno.js",
+    "migrate:conferencia-finalizacao": "node migrate_conferencia_finalizacao.js",
+    "test": "node --test",
+    "test:outbound": "node --test test/roteirizacaoXmlParser.test.js"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.6",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "fast-xml-parser": "^5.9.3",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.0",
+    "sequelize": "^6.37.3",
+    "socket.io": "^4.8.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}

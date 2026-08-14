@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Armazena Certo Contagem",
+    "slug": "armazena-certo-contagem",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "br.com.armazenacerto.contagem",
+      "infoPlist": {
+        "NSCameraUsageDescription": "A câmera é usada para ler códigos de barras durante a contagem de estoque."
+      }
+    },
+    "android": {
+      "package": "br.com.armazenacerto.contagem",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#07111f"
+      },
+      "permissions": ["CAMERA", "VIBRATE"]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que o Armazena Certo leia códigos de barras.",
+          "barcodeScannerEnabled": true,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Permita que o Armazena Certo acesse sua sessão."
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "SUBSTITUIR_APOS_EAS_INIT"
+      }
+    }
+  }
+}

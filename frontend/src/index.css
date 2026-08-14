@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light;
+  color: #1c1a1a;
+  background-color: #f8f8f8;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  /* Mantém, em 100% de zoom do navegador, a escala visual antes obtida em 90%. */
+  font-size: 90%;
+  background-color: #f8f8f8;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: #f8f8f8;
+  color: #1c1a1a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background-color: #99c3c3;
+  color: #002222;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #a6a6a6 #e1e1e1;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #e1e1e1;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #a6a6a6;
+  border-radius: 9999px;
+  border: 2px solid #e1e1e1;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #7a7a7a;
+}
+
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    transition:
+      color 160ms ease,
+      background-color 160ms ease,
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      transform 160ms ease;
+  }
+}
