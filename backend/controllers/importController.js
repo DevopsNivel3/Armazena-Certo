@@ -1,4 +1,3 @@
-const multer = require('multer');
 const path = require('path');
 const xlsx = require('xlsx');
 const fs = require('fs');
@@ -50,30 +49,24 @@ const getOptionalMappedNumber = (row, mappedColumn) => {
   };
 };
 
-// Configure Multer for file upload
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname);
-  }
-});
-
-const upload = multer({ storage: storage });
-
-exports.uploadMiddleware = upload.single('file');
-
 exports.uploadFile = (req, res) => {
+  const filePath = req.file?.path;
+
   try {
     if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded' });
+      return res.status(400).json({ message: 'Nenhuma planilha foi enviada.' });
     }
 
-    const filePath = req.file.path;
     const workbook = xlsx.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      throw new Error('A planilha não possui nenhuma aba.');
+    }
+
     const sheet = workbook.Sheets[sheetName];
+    if (!sheet || !sheet['!ref']) {
+      throw new Error('A primeira aba da planilha está vazia.');
+    }
     
     // Get headers
     const headers = [];
@@ -94,8 +87,13 @@ exports.uploadFile = (req, res) => {
       headers: headers
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error processing file' });
+    console.error('Erro ao interpretar a planilha:', error);
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    res.status(422).json({
+      message: error.message || 'Não foi possível interpretar a planilha.'
+    });
   }
 };
 

@@ -23,7 +23,6 @@ const missingVariables = [
   ['DB_HOST', dbConfig.host],
   ['DB_NAME', dbConfig.name],
   ['DB_USER', dbConfig.user],
-  ['DB_PASS', dbConfig.password],
 ]
   .filter(([, value]) => value === undefined || value === '')
   .map(([name]) => name);
