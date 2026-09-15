@@ -19,7 +19,11 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#07111f"
       },
-      "permissions": ["CAMERA", "VIBRATE"]
+      "permissions": [
+        "CAMERA",
+        "VIBRATE",
+        "android.permission.CAMERA"
+      ]
     },
     "plugins": [
       [
@@ -41,8 +45,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "SUBSTITUIR_APOS_EAS_INIT"
+        "projectId": "ee533d1d-3bad-40a2-9825-d3aef7fcaaf6"
       }
-    }
+    },
+    "owner": "jefersonabreu22"
   }
 }
