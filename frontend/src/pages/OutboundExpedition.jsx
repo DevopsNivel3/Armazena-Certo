@@ -112,7 +112,6 @@ export default function OutboundExpedition() {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('outboundUpdate', handleOutboundUpdate);
-      socket.disconnect();
     };
   }, [loadCargas]);
 

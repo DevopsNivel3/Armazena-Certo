@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const { sequelize, Usuario, Empresa } = require('./models');
+const { DEFAULT_USER_MODULES } = require('./constants/userModules');
 
 async function createAdmin() {
   try {
@@ -21,6 +22,7 @@ async function createAdmin() {
       existingUser.nome = nome;
       existingUser.senha_hash = senha_hash;
       existingUser.nivel_acesso = 'admin';
+      existingUser.modulos = DEFAULT_USER_MODULES;
       await existingUser.save();
 
       console.log('------------------------------------------------');
@@ -46,7 +48,8 @@ async function createAdmin() {
       email,
       senha_hash,
       nivel_acesso: 'admin',
-      empresa_id: empresa.id
+      empresa_id: empresa.id,
+      modulos: DEFAULT_USER_MODULES
     });
 
     console.log('------------------------------------------------');

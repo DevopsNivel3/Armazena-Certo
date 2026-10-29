@@ -1,5 +1,12 @@
 let io;
 
+// Remove imediatamente salas e conexões que ainda carregam permissões anteriores.
+function invalidateUserSockets(userId) {
+  if (!io) return;
+  io.to(`usuario_${userId}`).emit('permissionsChanged');
+  io.in(`usuario_${userId}`).disconnectSockets(true);
+}
+
 const socketPresence = new Map();
 
 function ensureSocketEntry(socketId) {
@@ -119,6 +126,7 @@ function getInventoryUserConnectionStatus(inventoryId) {
 }
 
 module.exports = {
+  invalidateUserSockets,
   init: (httpServer) => {
     const { Server } = require('socket.io');
     io = new Server(httpServer, {

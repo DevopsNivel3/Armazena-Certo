@@ -79,7 +79,6 @@ export default function Dashboard() {
 
     return () => {
       socket.off('dashboardUpdate');
-      socket.disconnect();
     };
   }, [loadInventories]);
 

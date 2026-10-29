@@ -1,12 +1,14 @@
 const express = require('express');
 const multer = require('multer');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { requireModule } = require('../middlewares/moduleAccessMiddleware');
 const expedicaoController = require('../controllers/expedicaoController');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 
 router.use(authMiddleware);
+router.use(requireModule('cross_docking'));
 router.get('/cargas', expedicaoController.listarCargas);
 router.get('/cargas/:id', expedicaoController.buscarCarga);
 router.put('/cargas/:id', expedicaoController.atualizarCarga);

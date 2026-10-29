@@ -64,7 +64,6 @@ export default function MyOutboundLoads() {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('outboundUpdate', refresh);
-      socket.disconnect();
     };
   }, [load]);
 

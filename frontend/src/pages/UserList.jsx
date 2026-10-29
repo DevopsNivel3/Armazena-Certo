@@ -10,19 +10,32 @@ import {
   X,
   History,
   Package,
+  ClipboardList,
+  Truck,
 } from 'lucide-react';
 import api from '../services/api';
 import Sidebar from '../components/Sidebar';
+import { MODULE_META, normalizeUserModules, hasModule } from '../utils/userModules';
+import { useAuth } from '../context/AuthContext';
 
 const ROLE_STYLES = {
   admin: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200',
   gerente: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200',
   operador: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  admin_inventario: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
 };
+
+const MODULE_OPTIONS = [
+  { id: 'inventario', icon: ClipboardList, tone: 'text-indigo-600 bg-indigo-50' },
+  { id: 'cross_docking', icon: Truck, tone: 'text-emerald-600 bg-emerald-50' },
+];
 
 const formatNumber = (value) => Number(value || 0).toLocaleString('pt-BR');
 
 export default function UserList() {
+  const { user: sessionUser, refreshUser } = useAuth();
+  const canViewHistory = hasModule(sessionUser, 'inventario');
+  const [saving, setSaving] = useState(false);
   const [users, setUsers] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +55,7 @@ export default function UserList() {
     senha: '',
     nivel_acesso: 'operador',
     empresa_id: '',
+    modulos: ['inventario'],
   });
 
   useEffect(() => {
@@ -98,6 +112,7 @@ export default function UserList() {
       senha: '',
       nivel_acesso: user.nivel_acesso,
       empresa_id: user.empresa_id || (companies.length > 0 ? companies[0].id : ''),
+      modulos: normalizeUserModules(user.modulos),
     });
     setShowModal(true);
   }
@@ -110,11 +125,13 @@ export default function UserList() {
       senha: '',
       nivel_acesso: 'operador',
       empresa_id: companies.length > 0 ? companies[0].id : '',
+      modulos: ['inventario'],
     });
     setShowModal(true);
   }
 
   async function handleViewHistory(user) {
+    if (!canViewHistory) return;
     setSelectedUserForHistory(user);
     setShowHistoryModal(true);
     setHistoryLoading(true);
@@ -134,6 +151,8 @@ export default function UserList() {
   async function handleSubmit(event) {
     event.preventDefault();
 
+    if (saving) return;
+    setSaving(true);
     try {
       if (currentUser) {
         const dataToSend = { ...formData };
@@ -142,6 +161,7 @@ export default function UserList() {
         }
 
         await api.put(`/usuarios/${currentUser.id}`, dataToSend);
+        if (Number(currentUser.id) === Number(sessionUser.id)) await refreshUser();
         setFeedback('Usuário atualizado com sucesso.');
       } else {
         await api.post('/usuarios', formData);
@@ -153,7 +173,18 @@ export default function UserList() {
     } catch (error) {
       console.error('Error saving user:', error);
       setFeedback(`Erro ao salvar usuário: ${error.response?.data?.error || error.message}`);
+    } finally {
+      setSaving(false);
     }
+  }
+
+  function toggleModule(moduleName) {
+    setFormData((current) => ({
+      ...current,
+      modulos: current.modulos.includes(moduleName)
+        ? current.modulos.filter((item) => item !== moduleName)
+        : [...current.modulos, moduleName],
+    }));
   }
 
   const filteredUsers = users.filter(
@@ -183,7 +214,7 @@ export default function UserList() {
                     Organize usuários, perfis e empresas com mais clareza.
                   </h1>
                   <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    Centralize permissões do sistema e mantenha a equipe pronta para operar inventários com segurança.
+                    Habilite Inventário e Cross Docking por usuário e defina as responsabilidades de cada pessoa.
                   </p>
                   <div className="mt-6">
                     <button
@@ -206,7 +237,7 @@ export default function UserList() {
                   <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Administradores</p>
                     <p className="mt-3 text-3xl font-bold text-white">{adminCount}</p>
-                    <p className="mt-2 text-sm text-slate-300">Acesso completo ao sistema.</p>
+                    <p className="mt-2 text-sm text-slate-300">Gestão de usuários e acessos.</p>
                   </div>
                   <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Operadores</p>
@@ -263,7 +294,7 @@ export default function UserList() {
               </div>
             </section>
 
-            <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-sm">
+            <section className="overflow-x-auto rounded-[28px] border border-slate-200/80 bg-white shadow-sm">
               <table className="min-w-full">
                 <thead className="bg-slate-50/80">
                   <tr>
@@ -272,6 +303,9 @@ export default function UserList() {
                     </th>
                     <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                       Perfil
+                    </th>
+                    <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      Módulos habilitados
                     </th>
                     <th className="px-6 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
                       Empresa
@@ -284,13 +318,13 @@ export default function UserList() {
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-12 text-center text-sm text-slate-500">
+                      <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500">
                         Carregando usuários...
                       </td>
                     </tr>
                   ) : filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan="4" className="px-6 py-12 text-center text-sm text-slate-500">
+                      <td colSpan="5" className="px-6 py-12 text-center text-sm text-slate-500">
                         Nenhum usuário encontrado.
                       </td>
                     </tr>
@@ -317,13 +351,24 @@ export default function UserList() {
                             {user.nivel_acesso.charAt(0).toUpperCase() + user.nivel_acesso.slice(1)}
                           </span>
                         </td>
+                        <td className="px-6 py-4">
+                          <div className="flex max-w-xs flex-wrap gap-1.5">
+                            {!normalizeUserModules(user.modulos).length && <span className="text-xs font-medium text-amber-700">Sem acesso aos módulos</span>}
+                            {normalizeUserModules(user.modulos).map((moduleName) => (
+                              <span key={moduleName} className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                                {MODULE_META[moduleName].label}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-sm text-slate-600">{user.Empresa?.nome || 'N/A'}</td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
+                              disabled={!canViewHistory}
                               onClick={() => handleViewHistory(user)}
-                              className="inline-flex items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200"
+                              className="inline-flex items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 disabled:hidden"
                               title="Ver Histórico"
                             >
                               <History className="mr-2 h-4 w-4" />
@@ -423,6 +468,7 @@ export default function UserList() {
                         onChange={(event) => setFormData({ ...formData, nivel_acesso: event.target.value })}
                       >
                         <option value="operador">Operador</option>
+                        <option value="admin_inventario">Administrador de Inventário</option>
                         <option value="gerente">Gerente</option>
                         <option value="admin">Administrador</option>
                       </select>
@@ -446,11 +492,41 @@ export default function UserList() {
                     </select>
                   </div>
 
+                  <fieldset>
+                    <legend className="text-sm font-semibold text-slate-700">Módulos do sistema</legend>
+                    <p className="mt-1 text-xs text-slate-500">
+                      O perfil define as ações permitidas. Cross Docking inclui recebimento e expedição. Desmarque os dois módulos para suspender o acesso operacional, preservando o histórico.
+                    </p>
+                    <div className="mt-3 grid gap-3">
+                      {MODULE_OPTIONS.map(({ id, icon: Icon, tone }) => {
+                        const checked = formData.modulos.includes(id);
+                        return (
+                          <label
+                            key={id}
+                            className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${checked ? 'border-indigo-300 bg-indigo-50/60' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleModule(id)}
+                              className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span className={`rounded-xl p-2 ${tone}`}><Icon className="h-5 w-5" /></span>
+                            <span>
+                              <span className="block text-sm font-bold text-slate-900">{MODULE_META[id].label}</span>
+                              <span className="mt-1 block text-xs leading-5 text-slate-500">{MODULE_META[id].description}</span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+
                   <div className="rounded-2xl bg-slate-50 p-4">
                     <div className="flex items-start gap-3">
                       <Shield className="mt-0.5 h-5 w-5 text-indigo-600" />
                       <p className="text-sm text-slate-600">
-                        Use perfis mais altos apenas para gestão. Operadores devem ter acesso restrito às rotinas de contagem.
+                        As permissões próprias da contagem — vínculo ao inventário, local e produtos liberados — continuam sendo configuradas dentro de cada inventário.
                       </p>
                     </div>
                   </div>
@@ -465,10 +541,11 @@ export default function UserList() {
                     </button>
                     <button
                       type="submit"
-                      className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-600/20 transition-all hover:bg-indigo-700"
+                      disabled={saving}
+                      className="inline-flex items-center justify-center rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-600/20 transition-all hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60"
                     >
                       <Check className="mr-2 h-4 w-4" />
-                      Salvar usuário
+                      {saving ? 'Salvando...' : 'Salvar usuário'}
                     </button>
                   </div>
                 </form>

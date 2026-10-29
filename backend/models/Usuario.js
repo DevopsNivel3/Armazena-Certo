@@ -1,6 +1,7 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
 const Empresa = require('./Empresa');
+const { normalizeUserModules } = require('../constants/userModules');
 
 const Usuario = sequelize.define('Usuario', {
   id: {
@@ -27,6 +28,24 @@ const Usuario = sequelize.define('Usuario', {
   nivel_acesso: {
     type: DataTypes.ENUM('admin', 'gerente', 'operador', 'admin_inventario'),
     defaultValue: 'operador'
+  },
+  modulos: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    get() {
+      return normalizeUserModules(this.getDataValue('modulos'));
+    },
+    set(value) {
+      this.setDataValue('modulos', JSON.stringify(normalizeUserModules(value)));
+    }
+  }
+}, {
+  hooks: {
+    beforeValidate(usuario) {
+      if (usuario.getDataValue('modulos') === null || usuario.getDataValue('modulos') === undefined) {
+        usuario.modulos = [];
+      }
+    }
   }
 });
 

@@ -3,6 +3,7 @@ const xlsx = require('xlsx');
 const { Inventario, EstoqueImportado, Produto, Contagem, Usuario, LiberacaoProduto, InventarioUsuario } = require('../models');
 const bcrypt = require('bcrypt');
 const { getIO, getInventoryUserConnectionStatus } = require('../socket');
+const { hasUserModule } = require('../constants/userModules');
 
 const ROUND_PRECISION = 1000;
 
@@ -103,7 +104,7 @@ async function verifyInventoryManagementAccess(user, inventoryId) {
   if (isManagementUser(user)) return null;
 
   if (user?.nivel_acesso === 'admin_inventario') {
-    const inventario = await Inventario.findByPk(inventoryId);
+    const inventario = await Inventario.findOne({ where: { id: inventoryId, empresa_id: user.empresa_id } });
     if (!inventario) return { status: 404, message: 'Inventory not found' };
     const isAssociated = await inventario.hasUsuario(user.id);
     if (isAssociated) return null; // Has access
@@ -200,12 +201,16 @@ async function getInventoryWithAccess({ inventoryId, user }) {
   return { inventario };
 }
 
-async function buildInventoryInsights(inventario) {
+async function buildInventoryInsights(inventario, productIds = null) {
   const inventarioId = inventario.id;
+  const itemWhere = {
+    inventario_id: inventarioId,
+    ...(productIds ? { produto_id: { [Op.in]: productIds } } : {})
+  };
   const currentStage = inventario.etapa_contagem || 1;
   const [estoqueRows, countRows, countEvents] = await Promise.all([
     EstoqueImportado.findAll({
-      where: { inventario_id: inventarioId },
+      where: itemWhere,
       include: [{
         model: Produto,
         attributes: ['id', 'sku', 'nome', 'categoria', 'unidade_medida', 'codigo_barras', 'codigo_referencia', 'preco_custo', 'preco_venda']
@@ -213,7 +218,7 @@ async function buildInventoryInsights(inventario) {
       order: [[Produto, 'nome', 'ASC']]
     }),
     Contagem.findAll({
-      where: { inventario_id: inventarioId },
+      where: itemWhere,
       attributes: [
         'produto_id',
         'numero_contagem',
@@ -223,7 +228,7 @@ async function buildInventoryInsights(inventario) {
       raw: true
     }),
     Contagem.findAll({
-        where: { inventario_id: inventarioId },
+        where: itemWhere,
         include: [
           {
             model: Produto,
@@ -457,6 +462,24 @@ exports.createInventory = async (req, res) => {
     } = req.body;
     const { empresa_id } = req.user;
 
+    if (!hasInventoryManagementRole(req.user)) {
+      return res.status(403).json({ message: 'Apenas administradores e gerentes podem criar inventarios.' });
+    }
+
+    let inventoryUsers = [];
+    if (Array.isArray(usuarios) && usuarios.length > 0) {
+      const requestedUserIds = [...new Set(usuarios.map(Number).filter(Number.isInteger))];
+      inventoryUsers = await Usuario.findAll({
+        where: { id: { [Op.in]: requestedUserIds }, empresa_id }
+      });
+
+      if (inventoryUsers.length !== requestedUserIds.length || inventoryUsers.some((usuario) => !hasUserModule(usuario, 'inventario'))) {
+        return res.status(400).json({
+          message: 'Todos os participantes devem pertencer a empresa e ter o modulo Inventario habilitado.'
+        });
+      }
+    }
+
     const inventario = await Inventario.create({
       nome,
       data_inicio,
@@ -471,9 +494,8 @@ exports.createInventory = async (req, res) => {
       locais_contagem: req.body.locais_contagem || ['Picking', 'Pulmão']
     });
 
-    if (usuarios && usuarios.length > 0) {
-      // usuarios should be an array of user IDs
-      await inventario.setUsuarios(usuarios);
+    if (inventoryUsers.length > 0) {
+      await inventario.setUsuarios(inventoryUsers);
     }
 
     res.status(201).json(inventario);
@@ -763,7 +785,7 @@ exports.updateInventoryStatus = async (req, res) => {
 
     const io = getIO();
     io.to(`inventory_${id}`).emit('inventoryUpdate', { type: 'status_changed', status });
-    io.emit('dashboardUpdate');
+    io.to(`empresa_${req.user.empresa_id}_inventario`).emit('dashboardUpdate');
 
     res.json(inventario);
   } catch (error) {
@@ -858,9 +880,10 @@ exports.getInventoryProducts = async (req, res) => {
       estoqueWhere.produto_id = { [Op.in]: assignedProductIds };
     }
 
-    const { reportRows } = await buildInventoryInsights(inventario);
+    const requiresRecountFilter = inventario.status === 'em_recontagem' && apenasDivergentes;
+    let reportRows = requiresRecountFilter ? (await buildInventoryInsights(inventario)).reportRows : null;
 
-    if (inventario.status === 'em_recontagem' && apenasDivergentes) {
+    if (requiresRecountFilter) {
       const recountPendingProductIds = reportRows
         .filter((row) => row.recontagem_pendente || row.status === 'pendente')
         .map((row) => row.produto_id);
@@ -902,9 +925,13 @@ exports.getInventoryProducts = async (req, res) => {
       offset
     });
 
+    if (!reportRows) {
+      reportRows = rows.length ? (await buildInventoryInsights(inventario, rows.map((row) => row.produto_id))).reportRows : [];
+    }
+    const insightsByProduct = new Map(reportRows.map((row) => [row.produto_id, row]));
     const rowsWithCounts = rows.map(row => {
       const rowData = row.toJSON();
-      const insight = reportRows.find(r => r.produto_id === rowData.produto_id);
+      const insight = insightsByProduct.get(rowData.produto_id);
       rowData.total_contado = insight ? insight.total_contado : 0;
       rowData.diferenca = insight ? insight.diferenca : (rowData.total_contado - rowData.saldo_erp);
       rowData.validades_contadas = insight ? insight.validades_contadas : [];
@@ -1521,7 +1548,7 @@ exports.getInventoryUsers = async (req, res) => {
         if (!inventario) return res.status(404).json({ message: 'Inventory not found' });
 
         const usuarios = await inventario.getUsuarios({
-            attributes: ['id', 'nome', 'email', 'nivel_acesso']
+            attributes: ['id', 'nome', 'email', 'nivel_acesso', 'modulos']
         });
 
         const connectionStatusMap = getInventoryUserConnectionStatus(id);
@@ -1569,7 +1596,7 @@ exports.getInventoryReleaseOptions = async (req, res) => {
     const { inventario } = access;
     const [usuarios, insights, releaseRows] = await Promise.all([
       inventario.getUsuarios({
-        attributes: ['id', 'nome', 'email', 'nivel_acesso'],
+        attributes: ['id', 'nome', 'email', 'nivel_acesso', 'modulos'],
         order: [['nome', 'ASC']]
       }),
       buildInventoryInsights(inventario),
@@ -1693,8 +1720,8 @@ exports.saveInventoryRelease = async (req, res) => {
       }
     });
 
-    if (!usuarioDestino) {
-      return res.status(404).json({ message: 'Usuario de destino nao encontrado.' });
+    if (!usuarioDestino || !hasUserModule(usuarioDestino, 'inventario')) {
+      return res.status(400).json({ message: 'O usuário deve pertencer à empresa e ter o módulo Inventário habilitado.' });
     }
 
     const isAssociated = await inventario.hasUsuario(usuarioDestino.id);
@@ -1809,6 +1836,10 @@ exports.addInventoryUser = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     const { empresa_id } = req.user;
 
+    if (nivel_acesso !== undefined && !['operador', 'admin_inventario'].includes(nivel_acesso)) {
+      return res.status(400).json({ message: 'Neste fluxo só é possível cadastrar operadores ou administradores de inventário.' });
+    }
+
     const managementError = await verifyInventoryManagementAccess(req.user, id);
     if (managementError) {
       return res.status(managementError.status).json({ message: managementError.message });
@@ -1836,11 +1867,16 @@ exports.addInventoryUser = async (req, res) => {
         email: normalizedEmail,
         senha_hash,
         nivel_acesso: nivel_acesso || 'operador',
-        empresa_id
+        empresa_id,
+        modulos: ['inventario']
       });
     } else if (usuario.empresa_id !== empresa_id) {
       return res.status(400).json({
         message: 'Ja existe um usuario com este email vinculado a outra empresa.'
+      });
+    } else if (!usuario.modulos.includes('inventario')) {
+      return res.status(400).json({
+        message: 'Habilite o modulo Inventario para este usuario antes de vincula-lo a contagem.'
       });
     }
 
@@ -1858,7 +1894,8 @@ exports.addInventoryUser = async (req, res) => {
       id: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
-      nivel_acesso: usuario.nivel_acesso
+      nivel_acesso: usuario.nivel_acesso,
+      modulos: usuario.modulos
     });
   } catch (error) {
     console.error(error);
@@ -2028,8 +2065,12 @@ exports.submitCount = async (req, res) => {
       : req.body.quantidade_contada;
     const quantidadeContada = Number(rawQuantity);
     const { id: usuario_id, empresa_id, nivel_acesso } = req.user;
+    const requestedProductId = req.body.produto_id === undefined ? null : Number(req.body.produto_id);
+    if (requestedProductId !== null && (!Number.isSafeInteger(requestedProductId) || requestedProductId <= 0)) {
+      return res.status(400).json({ message: 'Produto informado inválido.' });
+    }
 
-    if (rawQuantity === '' || rawQuantity === null || rawQuantity === undefined || !Number.isFinite(quantidadeContada)) {
+    if (!['number', 'string'].includes(typeof rawQuantity) || rawQuantity === '' || !Number.isFinite(quantidadeContada)) {
       return res.status(400).json({ message: 'Informe uma quantidade numerica valida.' });
     }
 
@@ -2040,11 +2081,13 @@ exports.submitCount = async (req, res) => {
     const inventario = await Inventario.findOne({ where: { id, empresa_id } });
     if (!inventario) return res.status(404).json({ message: 'Inventory not found' });
 
+    let assignedLocation = null;
     if (nivel_acesso === 'operador' || nivel_acesso === 'admin_inventario') {
-      const isAssociated = await inventario.hasUsuario(usuario_id);
-      if (!isAssociated) {
+      const assignment = await InventarioUsuario.findOne({ where: { inventario_id: id, usuario_id } });
+      if (!assignment) {
         return res.status(403).json({ message: 'Access denied to submit count to this inventory' });
       }
+      assignedLocation = assignment.local_atribuido || null;
     }
 
     const clientOperationId = String(req.body.client_operation_id || '').trim().slice(0, 64) || null;
@@ -2078,8 +2121,8 @@ exports.submitCount = async (req, res) => {
       return res.status(400).json({ message: 'A quantidade não pode ser zero.' });
     }
 
-    const estoqueItem = await EstoqueImportado.findOne({
-      where: { inventario_id: id },
+    const matchedStock = await EstoqueImportado.findAll({
+      where: { inventario_id: id, ...(requestedProductId ? { produto_id: requestedProductId } : {}) },
       include: [{
         model: Produto,
         where: {
@@ -2091,8 +2134,14 @@ exports.submitCount = async (req, res) => {
           ]
         },
         attributes: ['id', 'sku', 'nome', 'categoria', 'codigo_referencia', 'codigo_barras', 'unidade_medida', 'fator_conversao']
-      }]
+      }],
+      limit: 2
     });
+    const matchedProductIds = new Set(matchedStock.map((item) => item.produto_id));
+    if (matchedProductIds.size > 1) {
+      return res.status(409).json({ message: 'Este código está vinculado a mais de um produto. Revise o cadastro antes de contar.' });
+    }
+    const estoqueItem = matchedStock[0];
 
     if (!estoqueItem?.Produto) {
       return res.status(404).json({ message: 'Produto nao encontrado neste inventario com o codigo informado.' });
@@ -2123,7 +2172,7 @@ exports.submitCount = async (req, res) => {
     }
 
     if (inventario.status === 'em_recontagem') {
-      const { reportRows } = await buildInventoryInsights(inventario);
+      const { reportRows } = await buildInventoryInsights(inventario, [estoqueItem.Produto.id]);
       const targetRow = reportRows.find((row) => row.produto_id === estoqueItem.Produto.id);
 
       // Permite recontar se era divergente na etapa anterior (requer_recontagem)
@@ -2150,6 +2199,9 @@ exports.submitCount = async (req, res) => {
       fatorConversao: estoqueItem.fator_conversao ?? estoqueItem.Produto?.fator_conversao
     });
     const quantidadePadronizada = roundValue(quantidadeContada * multiplicadorAplicado);
+    if (!Number.isFinite(quantidadePadronizada) || quantidadePadronizada === 0 || Math.abs(quantidadePadronizada) > 9999999.999) {
+      return res.status(400).json({ message: 'A quantidade convertida deve ser diferente de zero e não pode ultrapassar 9.999.999,999.' });
+    }
 
     const contagem = await Contagem.create({
       inventario_id: id,
@@ -2159,13 +2211,13 @@ exports.submitCount = async (req, res) => {
       quantidade_contada: quantidadePadronizada,
       validade: normalizeValidityDate(req.body.validade),
       observacao: req.body.observacao || null,
-      local_contagem: req.body.local || null,
+      local_contagem: assignedLocation || req.body.local || null,
       client_operation_id: clientOperationId
     });
 
     const io = getIO();
     io.to(`inventory_${id}`).emit('inventoryUpdate', { type: 'count_submitted', contagem });
-    io.emit('dashboardUpdate');
+    io.to(`empresa_${req.user.empresa_id}_inventario`).emit('dashboardUpdate');
 
     res.status(201).json({
       ...contagem.toJSON(),
@@ -2174,6 +2226,19 @@ exports.submitCount = async (req, res) => {
       quantidade_padronizada: quantidadePadronizada
     });
   } catch (error) {
+    // Requisições concorrentes com o mesmo identificador não geram uma nova contagem.
+    if (error.name === 'SequelizeUniqueConstraintError' && req.body.client_operation_id) {
+      try {
+        const existingCount = await Contagem.findOne({ where: {
+          inventario_id: req.params.id,
+          usuario_id: req.user.id,
+          client_operation_id: String(req.body.client_operation_id).trim().slice(0, 64)
+        } });
+        if (existingCount) return res.status(200).json({ ...existingCount.toJSON(), duplicada: true });
+      } catch (lookupError) {
+        console.error('Erro ao recuperar contagem já registrada:', lookupError);
+      }
+    }
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
@@ -2236,7 +2301,7 @@ exports.manualAdjustment = async (req, res) => {
 
     const io = getIO();
     io.to(`inventory_${id}`).emit('inventoryUpdate', { type: 'manual_adjustment' });
-    io.emit('dashboardUpdate');
+    io.to(`empresa_${req.user.empresa_id}_inventario`).emit('dashboardUpdate');
 
     res.status(200).json({ message: 'Ajuste manual realizado com sucesso.' });
   } catch (error) {

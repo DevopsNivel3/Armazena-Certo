@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const importController = require('../controllers/importController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { requireModule } = require('../middlewares/moduleAccessMiddleware');
 
 const uploadDirectory = path.resolve(__dirname, '..', 'uploads');
 fs.mkdirSync(uploadDirectory, { recursive: true });
@@ -58,6 +59,7 @@ const receiveSpreadsheet = (req, res, next) => {
 };
 
 router.use(authMiddleware);
+router.use(requireModule('inventario'));
 
 // Route for file upload (returns headers)
 router.post('/upload', receiveSpreadsheet, importController.uploadFile);

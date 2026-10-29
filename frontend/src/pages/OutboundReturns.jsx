@@ -84,7 +84,6 @@ export default function OutboundReturns() {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('outboundUpdate', handleOutboundUpdate);
-      socket.disconnect();
     };
   }, [loadCargas]);
 

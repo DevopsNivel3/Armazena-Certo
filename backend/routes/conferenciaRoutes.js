@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const conferenciaController = require('../controllers/conferenciaController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { requireModule } = require('../middlewares/moduleAccessMiddleware');
 
 const router = express.Router();
 const upload = multer({
@@ -13,6 +14,7 @@ const upload = multer({
 });
 
 router.use(authMiddleware);
+router.use(requireModule('cross_docking'));
 
 router.get('/inbound/lotes', conferenciaController.getInboundBatches);
 router.post('/inbound/lotes', upload.array('xmls', 200), conferenciaController.createInboundBatch);

@@ -1,5 +1,6 @@
-import { createContext, useState, useEffect, useContext } from 'react';
+import { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import api from '../services/api';
+import { socket, connectSocketWithToken } from '../services/socket';
 
 const AuthContext = createContext();
 const TOKEN_KEY = 'token';
@@ -15,38 +16,63 @@ function readCachedUser() {
 }
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => readCachedUser());
-  const [loading, setLoading] = useState(() => !!localStorage.getItem(TOKEN_KEY) && !readCachedUser());
+  const [user, setUser] = useState(() => localStorage.getItem(TOKEN_KEY) ? readCachedUser() : null);
+  const [loading, setLoading] = useState(() => !!localStorage.getItem(TOKEN_KEY));
 
-  useEffect(() => {
+  const refreshUser = useCallback(async () => {
     const token = localStorage.getItem(TOKEN_KEY);
-    const cachedUser = readCachedUser();
-
-    if (token) {
-      api.get('/auth/me')
-        .then(response => {
-          setUser(response.data);
-          localStorage.setItem(USER_CACHE_KEY, JSON.stringify(response.data));
-        })
-        .catch((error) => {
-          const status = error.response?.status;
-
-          if (status === 400 || status === 401 || status === 403) {
-            localStorage.removeItem(TOKEN_KEY);
-            localStorage.removeItem(USER_CACHE_KEY);
-            setUser(null);
-          } else {
-            console.warn('Não foi possível validar o token com o servidor (possível offline). Mantendo cache.');
-            if (cachedUser) {
-              setUser(cachedUser);
-            }
-          }
-        })
-        .finally(() => {
-          setLoading(false);
-        });
+    if (!token) return null;
+    try {
+      const response = await api.get('/auth/me');
+      if (localStorage.getItem(TOKEN_KEY) !== token) return null;
+      setUser(response.data);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(response.data));
+      return response.data;
+    } catch (error) {
+      if (localStorage.getItem(TOKEN_KEY) !== token) return null;
+      if ([400, 401, 403].includes(error.response?.status)) {
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_CACHE_KEY);
+        setUser(null);
+        socket.disconnect();
+      }
+      return null;
     }
   }, []);
+
+  useEffect(() => {
+    void refreshUser().finally(() => setLoading(false));
+    const refresh = () => { void refreshUser(); };
+    const interval = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener('module-access-denied', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener('module-access-denied', refresh);
+    };
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const refresh = () => { void refreshUser(); };
+    const reconnect = (reason) => {
+      if (reason === 'io server disconnect') {
+        void refreshUser().then((current) => {
+          if (current) connectSocketWithToken();
+        });
+      }
+    };
+    socket.on('permissionsChanged', refresh);
+    socket.on('disconnect', reconnect);
+    connectSocketWithToken();
+    return () => {
+      socket.off('permissionsChanged', refresh);
+      socket.off('disconnect', reconnect);
+    };
+  }, [user?.id, refreshUser]);
 
   const login = async (email, senha) => {
     const response = await api.post('/auth/login', {
@@ -65,10 +91,11 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem(USER_CACHE_KEY);
     setUser(null);
     setLoading(false);
+    socket.disconnect();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

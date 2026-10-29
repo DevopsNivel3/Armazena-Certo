@@ -67,7 +67,6 @@ export default function InventoryList() {
 
     return () => {
       socket.off('dashboardUpdate');
-      socket.disconnect();
     };
   }, [loadInventories]);
 

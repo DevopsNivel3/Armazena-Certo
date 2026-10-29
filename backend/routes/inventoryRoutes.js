@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const inventoryController = require('../controllers/inventoryController');
 const authMiddleware = require('../middlewares/authMiddleware');
+const { requireModule } = require('../middlewares/moduleAccessMiddleware');
 
 router.use(authMiddleware);
+router.use(requireModule('inventario'));
 
 router.post('/', inventoryController.createInventory);
 router.get('/', inventoryController.getInventories);

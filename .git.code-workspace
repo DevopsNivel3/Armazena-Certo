@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"path": ".git"
+		},
+		{
+			"path": ".vscode"
+		},
+		{
+			"path": "artifacts"
+		},
+		{
+			"path": "backend"
+		},
+		{
+			"path": "frontend"
+		},
+		{
+			"path": "mobile"
+		},
+		{
+			"path": "xml_testes"
+		}
+	]
+}

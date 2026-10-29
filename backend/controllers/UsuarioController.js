@@ -2,6 +2,10 @@ const Usuario = require('../models/Usuario');
 const Empresa = require('../models/Empresa');
 const bcrypt = require('bcrypt');
 const { fn, col, where, Op } = require('sequelize');
+const { normalizeUserModules, isValidUserModules } = require('../constants/userModules');
+const { invalidateUserSockets } = require('../socket');
+
+const USER_ROLES = ['admin', 'gerente', 'operador', 'admin_inventario'];
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
 
@@ -58,7 +62,7 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
   try {
-    const { nome, email, senha, nivel_acesso, empresa_id } = req.body;
+    const { nome, email, senha, nivel_acesso, empresa_id, modulos } = req.body;
     
     // Admin can create anything. Gerente and admin_inventario can create 'operador' and 'admin_inventario'.
     if (req.user?.nivel_acesso !== 'admin') {
@@ -70,13 +74,30 @@ exports.create = async (req, res) => {
       }
     }
     const normalizedEmail = normalizeEmail(email);
+    if (modulos !== undefined && !isValidUserModules(modulos)) {
+      return res.status(400).json({ error: 'Módulos inválidos. Utilize inventario e cross_docking.' });
+    }
+    if (nivel_acesso !== undefined && !USER_ROLES.includes(nivel_acesso)) {
+      return res.status(400).json({ error: 'Perfil de acesso inválido.' });
+    }
+    const callerModules = normalizeUserModules(req.user?.modulos);
+    const normalizedModules = normalizeUserModules(modulos);
+
+    if (req.user.nivel_acesso === 'admin_inventario'
+      && normalizedModules.some((moduleName) => moduleName !== 'inventario')) {
+      return res.status(403).json({ error: 'Administradores de inventário só podem conceder o módulo Inventário.' });
+    }
+
+    if (req.user?.nivel_acesso !== 'admin' && normalizedModules.some((moduleName) => !callerModules.includes(moduleName))) {
+      return res.status(403).json({ error: 'Voce nao pode conceder acesso a um modulo que nao possui.' });
+    }
 
     if (!nome || !normalizedEmail || !senha) {
       return res.status(400).json({ error: 'Nome, email e senha são obrigatórios' });
     }
 
-    const targetCompanyId = empresa_id || req.user.empresa_id;
-    if (targetCompanyId !== req.user.empresa_id) {
+    const targetCompanyId = req.user.empresa_id;
+    if (empresa_id !== undefined && Number(empresa_id) !== Number(targetCompanyId)) {
       return res.status(403).json({ error: 'Não é permitido criar usuários em outra empresa' });
     }
     
@@ -96,7 +117,8 @@ exports.create = async (req, res) => {
       email: normalizedEmail,
       senha_hash,
       nivel_acesso: nivel_acesso || 'operador',
-      empresa_id: targetCompanyId
+      empresa_id: targetCompanyId,
+      modulos: normalizedModules
     });
 
     const { senha_hash: _, ...usuarioSemSenha } = usuario.toJSON();
@@ -113,7 +135,13 @@ exports.update = async (req, res) => {
       return res.status(accessError.status).json({ error: accessError.message });
     }
 
-    const { nome, email, nivel_acesso, empresa_id, senha } = req.body;
+    const { nome, email, nivel_acesso, empresa_id, senha, modulos } = req.body;
+    if (modulos !== undefined && !isValidUserModules(modulos)) {
+      return res.status(400).json({ error: 'Módulos inválidos. Utilize inventario e cross_docking.' });
+    }
+    if (nivel_acesso !== undefined && !USER_ROLES.includes(nivel_acesso)) {
+      return res.status(400).json({ error: 'Perfil de acesso inválido.' });
+    }
     const usuario = await Usuario.findByPk(req.params.id);
     
     if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado' });
@@ -121,9 +149,13 @@ exports.update = async (req, res) => {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
 
-    const targetCompanyId = empresa_id || usuario.empresa_id;
-    if (targetCompanyId !== req.user.empresa_id) {
+    const targetCompanyId = req.user.empresa_id;
+    if (empresa_id !== undefined && Number(empresa_id) !== Number(targetCompanyId)) {
       return res.status(403).json({ error: 'Não é permitido mover usuários para outra empresa' });
+    }
+
+    if (Number(usuario.id) === Number(req.user.id) && nivel_acesso && nivel_acesso !== 'admin') {
+      return res.status(400).json({ error: 'Você não pode remover seu próprio perfil de administrador.' });
     }
 
     if (email) {
@@ -147,6 +179,9 @@ exports.update = async (req, res) => {
     usuario.nome = nome || usuario.nome;
     usuario.nivel_acesso = nivel_acesso || usuario.nivel_acesso;
     usuario.empresa_id = targetCompanyId;
+    if (modulos !== undefined) {
+      usuario.modulos = normalizeUserModules(modulos, []);
+    }
 
     if (senha) {
       const salt = await bcrypt.genSalt(10);
@@ -154,6 +189,7 @@ exports.update = async (req, res) => {
     }
 
     await usuario.save();
+    invalidateUserSockets(usuario.id);
     
     const { senha_hash: _, ...usuarioSemSenha } = usuario.toJSON();
     res.json(usuarioSemSenha);
@@ -179,6 +215,7 @@ exports.delete = async (req, res) => {
     }
     
     await usuario.destroy();
+    invalidateUserSockets(usuario.id);
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -214,7 +251,8 @@ exports.getHistory = async (req, res) => {
           },
         { 
           model: Inventario, 
-          attributes: ['id', 'nome'] 
+          attributes: ['id', 'nome'],
+          where: { empresa_id: req.user.empresa_id }
         }
       ],
       order: [['data_hora', 'DESC']],

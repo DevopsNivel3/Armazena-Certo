@@ -805,7 +805,6 @@ export default function InventoryDetails() {
       socket.off('connect', handleConnect);
       socket.off('inventoryUpdate', handleInventoryUpdate);
       socket.off('inventoryPresenceUpdate', handleInventoryPresenceUpdate);
-      socket.disconnect();
     };
   }, [id, scheduleRealtimeRefresh]);
 

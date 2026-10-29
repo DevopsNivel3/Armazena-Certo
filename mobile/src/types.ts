@@ -4,6 +4,7 @@ export type User = {
   email: string;
   nivel_acesso: string;
   empresa_id?: number | null;
+  modulos?: Array<'inventario' | 'cross_docking'>;
 };
 
 export type Inventory = {

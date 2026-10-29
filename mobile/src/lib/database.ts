@@ -41,6 +41,9 @@ export async function getDatabase() {
           PRIMARY KEY (inventory_id, product_id)
         );
         CREATE INDEX IF NOT EXISTS products_codes ON products (inventory_id, barcode, sku, reference);
+        CREATE INDEX IF NOT EXISTS products_barcode_lookup ON products (inventory_id, barcode);
+        CREATE INDEX IF NOT EXISTS products_sku_lookup ON products (inventory_id, sku);
+        CREATE INDEX IF NOT EXISTS products_reference_lookup ON products (inventory_id, reference);
         CREATE TABLE IF NOT EXISTS count_queue (
           local_id TEXT PRIMARY KEY NOT NULL,
           inventory_id INTEGER NOT NULL,
@@ -106,10 +109,10 @@ export async function cacheProducts(inventoryId: number, products: Product[], re
         inventoryId,
         product.productId,
         product.estoqueId ?? null,
-        product.sku,
+        product.sku.trim().toLocaleUpperCase('pt-BR'),
         product.name,
-        product.barcode,
-        product.reference,
+        product.barcode.trim().toLocaleUpperCase('pt-BR'),
+        product.reference.trim().toLocaleUpperCase('pt-BR'),
         product.category,
         product.unit,
         product.factor,
@@ -163,21 +166,32 @@ export async function getProducts(inventoryId: number, search = '') {
 
 export async function findProductByCode(inventoryId: number, candidates: string[]) {
   const db = await getDatabase();
-  for (const candidate of candidates) {
-    const row = await db.getFirstAsync<ProductRow>(
+  const normalized = [...new Set(candidates.map((value) => value.trim().toLocaleUpperCase('pt-BR')).filter(Boolean))];
+  if (!normalized.length) return null;
+
+  const placeholders = normalized.map(() => '?').join(',');
+  const params = [inventoryId, ...normalized, ...normalized, ...normalized];
+  let rows = await db.getAllAsync<ProductRow>(
+    `SELECT * FROM products WHERE inventory_id = ? AND
+     (barcode IN (${placeholders}) OR sku IN (${placeholders}) OR reference IN (${placeholders})) LIMIT 2`,
+    ...params
+  );
+  if (!rows.length) {
+    // Compatibilidade com catálogos salvos antes da normalização dos códigos.
+    rows = await db.getAllAsync<ProductRow>(
       `SELECT * FROM products WHERE inventory_id = ? AND
-       (UPPER(barcode) = ? OR UPPER(sku) = ? OR UPPER(reference) = ?) LIMIT 1`,
-      inventoryId, candidate, candidate, candidate
+       (UPPER(barcode) IN (${placeholders}) OR UPPER(sku) IN (${placeholders}) OR UPPER(reference) IN (${placeholders})) LIMIT 2`,
+      ...params
     );
-    if (row) return rowToProduct(row);
   }
-  return null;
+  if (rows.length > 1) throw new Error('Código vinculado a mais de um produto. Revise o cadastro antes de contar.');
+  return rows[0] ? rowToProduct(rows[0]) : null;
 }
 
 export async function enqueueCount(draft: CountDraft) {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
-    await db.runAsync(
+    const inserted = await db.runAsync(
       `INSERT OR IGNORE INTO count_queue
        (local_id, inventory_id, code, product_id, product_name, quantity, standardized_quantity,
         validity, observation, location, created_at, attempts, status)
@@ -186,10 +200,24 @@ export async function enqueueCount(draft: CountDraft) {
       draft.standardizedQuantity, draft.validity ?? null, draft.observation ?? null, draft.location ?? null,
       draft.createdAt
     );
+    if (inserted.changes === 0) return;
+    const row = await db.getFirstAsync<ProductRow>('SELECT * FROM products WHERE inventory_id = ? AND product_id = ?', draft.inventoryId, draft.productId);
+    const validities = json<Product['validities']>(row?.validities ?? null, []);
+    const locations = json<Product['locations']>(row?.locations ?? null, []);
+    if (draft.validity) {
+      const date = draft.validity.split('/').reverse().join('-');
+      const existing = validities.find((item) => item.data === date);
+      if (existing) existing.quantidade = Number(existing.quantidade) + draft.standardizedQuantity;
+      else validities.push({ data: date, quantidade: draft.standardizedQuantity });
+    }
+    const place = draft.location || 'Não informado';
+    const existingPlace = locations.find((item) => item.nome === place);
+    if (existingPlace) existingPlace.quantidade = Number(existingPlace.quantidade) + draft.standardizedQuantity;
+    else locations.push({ nome: place, quantidade: draft.standardizedQuantity });
     await db.runAsync(
-      `UPDATE products SET total_counted = total_counted + ?, difference = difference + ?
+      `UPDATE products SET total_counted = total_counted + ?, difference = difference + ?, validities = ?, locations = ?
        WHERE inventory_id = ? AND product_id = ?`,
-      draft.standardizedQuantity, draft.standardizedQuantity, draft.inventoryId, draft.productId
+      draft.standardizedQuantity, draft.standardizedQuantity, JSON.stringify(validities), JSON.stringify(locations), draft.inventoryId, draft.productId
     );
   });
 }

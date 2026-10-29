@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { Package, Search, CheckCircle2, Filter, X, Box, Barcode, ChevronDown, ChevronUp, Camera, RefreshCw, Wifi, WifiOff, CloudOff, CloudUpload, CheckCheck, AlertCircle, ClipboardList, ScanLine, Zap, ShieldCheck } from 'lucide-react';
+import { Package, Search, CheckCircle2, Filter, X, Box, Barcode, ChevronDown, ChevronUp, Camera, RefreshCw, Wifi, WifiOff, CloudUpload, CheckCheck, AlertCircle, ClipboardList, ScanLine, Zap, ShieldCheck } from 'lucide-react';
 import ScannerModal from '../components/ScannerModal';
 import Sidebar from '../components/Sidebar';
 import { connectSocketWithToken, socket } from '../services/socket';
+import useKeyboardViewport from '../hooks/useKeyboardViewport';
 
 const OFFLINE_QUEUE_KEY = 'inventory_offline_queue';
 const OFFLINE_INVENTORY_CACHE_KEY = 'inventory_offline_cache';
 const OFFLINE_PRODUCTS_CACHE_KEY = 'inventory_products_offline_cache';
-const QUICK_SCAN_MINIMIZED_KEY = 'inventory_quick_scan_minimized';
 const QUICK_SCAN_MODE_KEY = 'inventory_quick_scan_mode';
 const MAX_AUTO_SYNC_ATTEMPTS = 4;
 const SYNC_RETRY_BASE_DELAY_MS = 3000;
@@ -186,55 +186,6 @@ function resolveCountMultiplier(item) {
   return 1;
 }
 
-function IdentifiedProductDetails({ item }) {
-  const product = item?.Produto;
-  if (!product) return null;
-
-  return (
-    <section className="w-full rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-white p-4 text-cyan-950 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-600 text-white">
-          <CheckCircle2 className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-700">Produto identificado</p>
-          <h3 className="mt-1 text-base font-bold leading-tight text-slate-900">{product.nome}</h3>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div className="rounded-xl border border-cyan-100 bg-white p-2.5">
-              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">SKU</span>
-              <span className="mt-1 block break-all font-mono text-xs font-bold text-slate-800">{product.sku || '-'}</span>
-            </div>
-            <div className="rounded-xl border border-cyan-100 bg-white p-2.5">
-              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Referência</span>
-              <span className="mt-1 block break-all font-mono text-xs font-bold text-slate-800">{product.codigo_referencia || '-'}</span>
-            </div>
-            <div className="rounded-xl border border-cyan-100 bg-white p-2.5">
-              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Código de barras</span>
-              <span className="mt-1 block break-all font-mono text-xs font-bold text-slate-800">{product.codigo_barras || '-'}</span>
-            </div>
-            <div className="rounded-xl border border-cyan-100 bg-white p-2.5">
-              <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">Categoria</span>
-              <span className="mt-1 block text-xs font-bold text-slate-800">{product.categoria || 'Sem categoria'}</span>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700">Unidade: {product.unidade_medida || 'UN'}</span>
-            <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700">Fator: {item.fator_conversao ?? product.fator_conversao ?? 1}</span>
-            <span className="rounded-lg bg-indigo-50 px-2.5 py-1 text-indigo-700">Já contado: {item.total_contado || 0}</span>
-            <span className={`rounded-lg px-2.5 py-1 ${(item.diferenca || 0) === 0 ? 'bg-slate-100 text-slate-700' : 'bg-amber-50 text-amber-800'}`}>Diferença: {item.diferenca > 0 ? '+' : ''}{item.diferenca || 0}</span>
-          </div>
-          {(item.validades_contadas?.length > 0 || item.locais_contados?.length > 0) && (
-            <div className="mt-3 border-t border-cyan-100 pt-3 text-xs text-slate-600">
-              {item.locais_contados?.length > 0 && <p><strong>Locais:</strong> {item.locais_contados.map((entry) => `${entry.nome} (${entry.quantidade})`).join(' · ')}</p>}
-              {item.validades_contadas?.length > 0 && <p className="mt-1"><strong>Validades:</strong> {item.validades_contadas.map((entry) => `${new Date(entry.data).toLocaleDateString('pt-BR')} (${entry.quantidade})`).join(' · ')}</p>}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export default function InventoryCount() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -256,13 +207,12 @@ export default function InventoryCount() {
 
   // Quick Scan State
   const [quickBarcode, setQuickBarcode] = useState('');
-  const [quickQuantity, setQuickQuantity] = useState(1);
+  const [quickQuantity, setQuickQuantity] = useState('');
   const [quickValidade, setQuickValidade] = useState('');
   const [quickObservacao, setQuickObservacao] = useState('');
   const [isSubmittingQuick, setIsSubmittingQuick] = useState(false);
   const [quickProduct, setQuickProduct] = useState(null);
   const [activeTab, setActiveTab] = useState('count');
-  const [isQuickScanMinimized, setIsQuickScanMinimized] = useState(false);
   const [scanMode, setScanMode] = useState(() => {
     try {
       return localStorage.getItem(`${QUICK_SCAN_MODE_KEY}_${id}`) === 'auto' ? 'auto' : 'review';
@@ -271,6 +221,12 @@ export default function InventoryCount() {
     }
   });
   const [recentScans, setRecentScans] = useState([]);
+  const [recentScansOpen, setRecentScansOpen] = useState(false);
+  const [cameraEntry, setCameraEntry] = useState(false);
+  const [identifyingProduct, setIdentifyingProduct] = useState(false);
+  const identifyLockRef = useRef(false);
+  const identificationErrorRef = useRef('');
+  const quickQuantityInputRef = useRef(null);
 
   // Expanded Product Form State
   const [expandedProductId, setExpandedProductId] = useState(null);
@@ -281,6 +237,10 @@ export default function InventoryCount() {
 
   // Scanner Modal State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const viewportRef = useRef(null);
+  const keyboardOpen = useKeyboardViewport(viewportRef, !loading && Boolean(inventory) && !isScannerOpen);
+  const scannerOpenRef = useRef(isScannerOpen);
+  scannerOpenRef.current = isScannerOpen;
 
   const [selectedLocal, setSelectedLocal] = useState('');
 
@@ -392,42 +352,46 @@ export default function InventoryCount() {
   }, []);
 
   const playTone = useCallback((type) => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    try {
+      if (typeof window === 'undefined') {
+        return;
+      }
 
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      return;
-    }
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        return;
+      }
 
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContextClass();
-    }
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContextClass();
+      }
 
-    const context = audioContextRef.current;
-    if (context.state === 'suspended') {
-      void context.resume();
-    }
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    const now = context.currentTime;
+      const context = audioContextRef.current;
+      if (context.state === 'suspended') {
+        void context.resume().catch(() => {});
+      }
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      const now = context.currentTime;
 
-    oscillator.type = type === 'error' ? 'square' : 'sine';
-    oscillator.frequency.setValueAtTime(type === 'error' ? 190 : type === 'identified' ? 1040 : 880, now);
-    if (type === 'success') oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+      oscillator.type = type === 'error' ? 'square' : 'sine';
+      oscillator.frequency.setValueAtTime(type === 'error' ? 190 : type === 'identified' ? 1040 : 880, now);
+      if (type === 'success') oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
 
-    gainNode.gain.setValueAtTime(0.001, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      gainNode.gain.setValueAtTime(0.001, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
-    oscillator.connect(gainNode);
-    gainNode.connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.18);
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.18);
 
-    if (navigator.vibrate) {
-      navigator.vibrate(type === 'error' ? [80, 50, 80] : type === 'identified' ? 35 : 60);
+      if (navigator.vibrate) {
+        navigator.vibrate(type === 'error' ? [80, 50, 80] : type === 'identified' ? 35 : 60);
+      }
+    } catch {
+      // Som e vibração nunca podem interromper o registro da contagem.
     }
   }, []);
 
@@ -748,23 +712,11 @@ export default function InventoryCount() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(`${QUICK_SCAN_MINIMIZED_KEY}_${id}`, isQuickScanMinimized ? '1' : '0');
-    } catch {
-      // Ignora falhas de persistência local
-    }
-  }, [id, isQuickScanMinimized]);
-
-  useEffect(() => {
-    try {
       localStorage.setItem(`${QUICK_SCAN_MODE_KEY}_${id}`, scanMode);
     } catch {
       // A preferência é opcional; a contagem continua funcionando sem ela.
     }
   }, [id, scanMode]);
-
-  useEffect(() => {
-    if (inventory?.validade_obrigatoria && scanMode === 'auto') setScanMode('review');
-  }, [inventory?.validade_obrigatoria, scanMode]);
 
   useEffect(() => {
     fetchInventory();
@@ -812,7 +764,6 @@ export default function InventoryCount() {
       }
       socket.off('connect', handleConnect);
       socket.off('inventoryUpdate', handleInventoryUpdate);
-      socket.disconnect();
     };
   }, [id]);
 
@@ -897,6 +848,10 @@ export default function InventoryCount() {
   };
 
   const submitCount = async (barcode, quantityToSubmit, validadeToSubmit = null, observacaoToSubmit = null, isQuick = false, resolvedProduct = null) => {
+    if (!['em_contagem', 'em_recontagem'].includes(inventory?.status)) {
+      setMessage({ text: 'Este inventário não está aberto para contagem.', type: 'error' });
+      return false;
+    }
     const normalizedBarcode = normalizeLookupCode(barcode);
 
     if (!normalizedBarcode) {
@@ -905,7 +860,7 @@ export default function InventoryCount() {
       return false;
     }
 
-    if (!Number.isFinite(Number(quantityToSubmit))) {
+    if (quantityToSubmit === '' || quantityToSubmit === null || !Number.isFinite(Number(quantityToSubmit))) {
       setMessage({ text: 'Informe uma quantidade válida', type: 'error' });
       playTone('error');
       return false;
@@ -934,7 +889,7 @@ export default function InventoryCount() {
 
     if (inventory?.validade_obrigatoria && !validadeToSubmit) {
       // Check if product already has validade
-      const targetProduct = products.find(item => {
+      const targetProduct = resolvedProduct || products.find(item => {
         const p = item?.Produto;
         if (!p) return false;
         return productMatchesCode(p, normalizedBarcode);
@@ -975,6 +930,14 @@ export default function InventoryCount() {
     const standardizedQuantity = targetProduct
       ? roundInventoryQuantity(quantityToSubmit * resolveCountMultiplier(targetProduct))
       : roundInventoryQuantity(quantityToSubmit);
+    if (!Number.isFinite(standardizedQuantity) || standardizedQuantity === 0 || Math.abs(standardizedQuantity) > 9999999.999) {
+      submitLockRef.current = false;
+      setIsSubmittingQuick(false);
+      setIsSubmittingProduct(false);
+      setMessage({ text: 'A quantidade convertida deve ser diferente de zero e estar dentro do limite de 9.999.999,999.', type: 'error' });
+      return false;
+    }
+    if (targetProduct?.Produto?.id) payload.produto_id = targetProduct.Produto.id;
 
     if (validadeToSubmit) {
       payload.validade = validadeToSubmit;
@@ -1002,11 +965,12 @@ export default function InventoryCount() {
     const resetAfterSubmit = () => {
       if (isQuick) {
         setQuickBarcode('');
-        setQuickQuantity(1);
+        setQuickQuantity('');
         setQuickValidade('');
         setQuickObservacao('');
         setQuickProduct(null);
-        if (quickBarcodeInputRef.current) quickBarcodeInputRef.current.focus();
+        setCameraEntry(false);
+        if (!isScannerOpen) quickBarcodeInputRef.current?.focus();
       } else {
         setExpandedProductId(null);
       }
@@ -1017,11 +981,9 @@ export default function InventoryCount() {
       queueOfflinePayload();
       applyCountLocally(normalizedBarcode, quantityToSubmit, validadeToSubmit, selectedLocal);
       showTemporaryMessage({
-        text: navigator.onLine
-          ? `Contagem registrada. ${normalizedBarcode} entrou na fila de envio (${standardizedQuantity > 0 ? '+' : ''}${standardizedQuantity}).`
-          : `Sem internet. A contagem de ${normalizedBarcode} foi salva localmente.`,
+        text: `${standardizedQuantity > 0 ? '+' : ''}${standardizedQuantity} · ${targetProduct?.Produto?.nome || normalizedBarcode}`,
         type: 'success'
-      }, 4000);
+      }, 1600);
       playTone('success');
       setRecentScans((current) => [{
         id: operationId,
@@ -1056,14 +1018,19 @@ export default function InventoryCount() {
       return produto && productMatchesCode(produto, normalizedBarcode);
     };
 
-    let matchedItem = products.find(matchesBarcode);
+    const uniqueMatches = (items) => [...new Map(items.filter(matchesBarcode).map((item) => [item.produto_id, item])).values()];
+    const cachedMatches = uniqueMatches(productsRef.current);
+    if (cachedMatches.length > 1) throw new Error('Código vinculado a mais de um produto. Revise o cadastro antes de contar.');
+    let matchedItem = cachedMatches[0];
 
     try {
       if (!matchedItem && navigator.onLine) {
         const response = await api.get(`/inventories/${id}/produtos`, {
           params: { page: 1, limit: 5, apenasDivergentes: false, codigo: normalizedBarcode }
         });
-        matchedItem = response.data.produtos?.find(matchesBarcode);
+        const matches = uniqueMatches(response.data.produtos || []);
+        if (matches.length > 1) throw new Error('Código vinculado a mais de um produto. Revise o cadastro antes de contar.');
+        matchedItem = matches[0];
         if (matchedItem?.Produto) {
           setProducts((current) => current.some((item) => item.produto_id === matchedItem.produto_id)
             ? current
@@ -1072,85 +1039,69 @@ export default function InventoryCount() {
       }
     } catch (error) {
       console.error('Error locating scanned product:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Não foi possível identificar o produto agora.');
     }
 
     return matchedItem?.Produto ? matchedItem : null;
   };
 
-  const findQuickProduct = async (barcode = quickBarcode) => {
+  const prepareQuickProduct = async (barcode, fromCamera = false) => {
+    if (identifyLockRef.current || submitLockRef.current) return false;
+    identificationErrorRef.current = '';
     const normalizedBarcode = normalizeLookupCode(barcode);
-
-    if (!normalizedBarcode) {
-      setMessage({ text: 'Bipe ou informe o código do produto primeiro.', type: 'error' });
+    if (!normalizedBarcode) return false;
+    identifyLockRef.current = true;
+    setIdentifyingProduct(true);
+    try {
+      const matchedItem = await locateProduct(normalizedBarcode);
+      if (fromCamera && !scannerOpenRef.current) return false;
+      if (!matchedItem?.Produto) {
+        identificationErrorRef.current = 'Produto não encontrado neste inventário.';
+        setMessage({ text: identificationErrorRef.current, type: 'error' });
+        playTone('error');
+        return false;
+      }
+      setQuickBarcode(normalizedBarcode);
+      setQuickProduct(matchedItem);
+      setQuickQuantity('');
+      setQuickValidade('');
+      setQuickObservacao('');
+      setCameraEntry(fromCamera && scanMode === 'auto');
+      setActiveTab('count');
+      setMessage({ text: '', type: '' });
+      playTone('identified');
+      requestAnimationFrame(() => quickQuantityInputRef.current?.focus());
+      return true;
+    } catch (error) {
+      identificationErrorRef.current = error.message || 'Não foi possível identificar o produto.';
+      setMessage({ text: identificationErrorRef.current, type: 'error' });
       playTone('error');
       return false;
+    } finally {
+      identifyLockRef.current = false;
+      setIdentifyingProduct(false);
     }
-
-    const matchedItem = await locateProduct(normalizedBarcode);
-
-    if (!matchedItem?.Produto) {
-      setQuickProduct(null);
-      setMessage({ text: 'Produto não encontrado', type: 'error' });
-      playTone('error');
-      return false;
-    }
-
-    setQuickBarcode(normalizedBarcode);
-    setQuickProduct(matchedItem);
-    setQuickQuantity(1);
-    setIsQuickScanMinimized(false);
-    setActiveTab('count');
-    setExpandedProductId(matchedItem.Produto.sku);
-    setProductQuantity((prev) => ({
-      ...prev,
-      [matchedItem.Produto.sku]: prev[matchedItem.Produto.sku] ?? 1
-    }));
-    setMessage({ text: '', type: '' });
-    playTone('identified');
-    return true;
   };
 
-  const handleQuickSubmit = async (e) => {
-    e.preventDefault();
+  const findQuickProduct = (barcode = quickBarcode) => prepareQuickProduct(barcode);
 
+  const handleQuickSubmit = async (event) => {
+    event.preventDefault();
     if (!quickProduct) {
       await findQuickProduct();
       return;
     }
-
-    const qtyToSubmit = parseQuantityValue(quickQuantity);
-    await submitCount(quickBarcode, qtyToSubmit, quickValidade, quickObservacao, true);
+    await submitCount(quickBarcode, parseQuantityValue(quickQuantity), quickValidade, quickObservacao, true, quickProduct);
   };
 
   const handleScanComplete = async (decodedText) => {
-    const normalizedBarcode = normalizeLookupCode(decodedText);
-    const matchedItem = await locateProduct(normalizedBarcode);
-
-    if (!matchedItem?.Produto) {
-      setQuickProduct(null);
-      playTone('error');
-      return { accepted: false, keepOpen: true, message: 'Produto não encontrado neste inventário.' };
-    }
-
-    if (scanMode === 'auto' && !inventory?.validade_obrigatoria) {
-      const saved = await submitCount(normalizedBarcode, 1, null, 'Leitura rápida por câmera', true, matchedItem);
-      return {
-        accepted: saved,
-        keepOpen: saved,
-        message: saved ? `+1 em ${matchedItem.Produto.nome}` : 'A leitura não pôde ser registrada.'
-      };
-    }
-
-    setQuickBarcode(normalizedBarcode);
-    setQuickProduct(matchedItem);
-    setQuickQuantity(1);
-    setIsQuickScanMinimized(false);
-    setActiveTab('count');
-    setExpandedProductId(matchedItem.Produto.sku);
-    setProductQuantity((prev) => ({ ...prev, [matchedItem.Produto.sku]: 1 }));
-    setMessage({ text: '', type: '' });
-    playTone('identified');
-    return { accepted: true, keepOpen: false, message: `${matchedItem.Produto.nome} identificado.` };
+    const accepted = await prepareQuickProduct(decodedText, true);
+    return {
+      accepted,
+      keepOpen: !accepted || scanMode === 'auto',
+      pause: accepted && scanMode === 'auto',
+      message: accepted ? 'Informe a quantidade.' : identificationErrorRef.current || 'Aguarde e tente novamente.'
+    };
   };
 
   const handleProductSubmit = async (produto) => {
@@ -1189,6 +1140,30 @@ export default function InventoryCount() {
         }));
       }
     }
+  };
+
+  const renderQuantityFields = () => {
+    if (!quickProduct?.Produto) return null;
+    const product = quickProduct.Produto;
+    const needsValidity = inventory?.validade_obrigatoria && !quickProduct.validades_contadas?.length;
+    const locations = Array.isArray(inventory?.locais_contagem) ? inventory.locais_contagem : [];
+    return (
+      <div className="space-y-4">
+        <div className="border-l-2 border-teal-600 pl-3">
+          <h2 className="text-base font-bold leading-snug text-slate-900">{product.nome}</h2>
+          <p className="mt-1 break-all font-mono text-xs text-slate-500">{product.sku || quickBarcode} · {product.unidade_medida || 'UN'}</p>
+        </div>
+        <div>
+          <label htmlFor="quick-count-quantity" className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Quantidade contada</label>
+          <input id="quick-count-quantity" ref={quickQuantityInputRef} type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" autoFocus required value={quickQuantity} onChange={(event) => setQuickQuantity(formatQuantityInput(event.target.value, product.unidade_medida))} placeholder="0" className="h-16 w-full rounded-xl border-2 border-teal-600 bg-teal-50/40 px-4 text-center text-3xl font-bold tabular-nums text-slate-950 outline-none focus:ring-4 focus:ring-teal-600/10" />
+        </div>
+        {needsValidity && <div><label htmlFor="quick-count-validity" className="mb-1.5 block text-xs font-semibold text-slate-600">Validade obrigatória</label><input id="quick-count-validity" type="text" inputMode="numeric" required value={quickValidade} onChange={(event) => setQuickValidade(formatValidityInput(event.target.value))} maxLength={10} placeholder="DD/MM/AAAA" className="min-h-12 w-full rounded-xl border border-slate-200 px-3 text-base outline-none focus:border-teal-600" /></div>}
+        {locations.length > 0 && <div className="flex items-center gap-3"><label htmlFor="quick-count-location" className="text-xs font-semibold text-slate-500">Local</label><select id="quick-count-location" value={selectedLocal} disabled={Boolean(inventory.local_atribuido)} onChange={(event) => setSelectedLocal(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 disabled:bg-slate-50">{locations.map((local) => <option key={local} value={local}>{local}</option>)}</select></div>}
+        <details className="rounded-xl border border-slate-100 px-3 py-2.5 text-xs text-slate-500"><summary className="cursor-pointer font-semibold">Mais detalhes</summary><div className="mt-3 space-y-3">{!needsValidity && <input aria-label="Validade opcional" type="text" inputMode="numeric" value={quickValidade} onChange={(event) => setQuickValidade(formatValidityInput(event.target.value))} maxLength={10} placeholder="Validade · DD/MM/AAAA" className="min-h-11 w-full rounded-lg border border-slate-200 px-3 text-base" />}<input aria-label="Observação" type="text" value={quickObservacao} onChange={(event) => setQuickObservacao(event.target.value)} placeholder="Observação opcional" className="min-h-11 w-full rounded-lg border border-slate-200 px-3 text-base" /><p className="break-all font-mono text-[11px]">EAN {product.codigo_barras || '—'} · REF {product.codigo_referencia || '—'}</p></div></details>
+        {cameraEntry && message.type === 'error' && <p role="alert" className="text-sm font-medium text-rose-700">{message.text}</p>}
+        <button type="submit" disabled={isSubmittingQuick || quickQuantity === ''} className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-3.5 text-sm font-bold text-white transition-colors hover:bg-teal-800 disabled:opacity-50"><CheckCheck className="h-5 w-5" />{isSubmittingQuick ? 'Salvando...' : cameraEntry ? 'Confirmar e ler próximo' : 'Confirmar contagem'}</button>
+      </div>
+    );
   };
 
   if (loading) {
@@ -1270,7 +1245,7 @@ export default function InventoryCount() {
   const HeaderStatusIcon = headerStatus.icon;
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 pb-24 font-sans selection:bg-indigo-100 selection:text-indigo-900 relative">
+    <div ref={viewportRef} className="relative flex min-h-screen flex-col bg-slate-50 pb-[calc(6rem_+_var(--keyboard-inset,0px))] font-sans selection:bg-indigo-100 selection:text-indigo-900 lg:flex-row [&_input]:scroll-my-6 [&_input:not(#quick-count-quantity)]:text-[16px] [&_select]:text-[16px]">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Main Content */}
@@ -1282,114 +1257,38 @@ export default function InventoryCount() {
           </div>
         ) : (
           <>
-            <div className={`rounded-2xl border p-4 shadow-sm ${headerStatus.containerClass}`}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-xl bg-white/70 p-2.5 shadow-sm">
-                    <HeaderStatusIcon className={`h-5 w-5 ${syncingQueue ? 'animate-spin' : ''}`} />
-                  </div>
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-bold uppercase tracking-wide">{headerStatus.label}</p>
-                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${headerStatus.badgeClass}`}>
-                        {isOnline ? 'Online' : 'Offline'}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm opacity-90">{headerStatus.description}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 text-xs sm:min-w-[220px]">
-                  <div className="rounded-xl bg-white/70 px-3 py-2 shadow-sm">
-                    <span className="font-semibold">Fila local:</span> {pendingQueueCount} pendência(s)
-                  </div>
-                  {lastSyncReport && (
-                    <div className="rounded-xl bg-white/70 px-3 py-2 shadow-sm">
-                      <span className="font-semibold">Última conferência:</span>{' '}
-                      {lastSyncReport.verified
-                        ? `${lastSyncReport.sent} enviada(s) e verificada(s)`
-                        : lastSyncReport.status === 'syncing'
-                          ? `sincronizando ${lastSyncReport.total || 0} contagem(ns)`
-                          : `${lastSyncReport.failed || 0} pendência(s) ainda precisam de atenção`}
-                    </div>
-                  )}
-                </div>
+            <header className="flex items-center justify-between gap-3 px-1 py-1">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Inventário #{id}</p>
+                <h1 className="truncate text-lg font-bold tracking-tight text-slate-900">{inventory.nome}</h1>
               </div>
-            </div>
+              <details className="relative shrink-0">
+                <summary className={`relative flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-full border [&::-webkit-details-marker]:hidden ${headerStatus.containerClass}`} aria-label={headerStatus.label} title={headerStatus.label}>
+                  <HeaderStatusIcon className={`h-5 w-5 ${syncingQueue ? 'animate-spin' : ''}`} />
+                  <span className="sr-only">{headerStatus.label}</span>
+                  {pendingQueueCount > 0 && <span className="absolute -right-1 -top-1 rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">{pendingQueueCount}</span>}
+                </summary>
+                <div className="absolute right-0 top-14 z-40 w-64 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-xl">
+                  <p className="font-bold text-slate-900">{headerStatus.label}</p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{headerStatus.description}</p>
+                  {pendingQueueCount > 0 && <button type="button" onClick={() => flushOfflineQueue({ manual: true })} disabled={!isOnline || syncingQueue} className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncingQueue ? 'animate-spin' : ''}`} />Sincronizar agora</button>}
+                </div>
+              </details>
+            </header>
 
             {/* Global Message Alert */}
             {message.text && (
-              <div className={`fixed top-4 left-4 right-4 md:static md:mb-0 p-4 rounded-2xl flex items-start space-x-3 shadow-lg md:shadow-sm z-50 transition-all animate-in fade-in slide-in-from-top-4 md:animate-none ${
+              <div role={message.type === 'error' ? 'alert' : 'status'} className={`fixed bottom-24 left-4 right-4 md:static md:mb-0 p-3 rounded-xl flex items-start space-x-3 shadow-lg md:shadow-sm z-50 transition-all ${
                 message.type === 'success'
                   ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/60'
                   : 'bg-rose-50 text-rose-900 border border-rose-200/60'
               }`}>
                 {message.type === 'success' ? <CheckCircle2 className="h-5 w-5 flex-shrink-0 mt-0.5 text-emerald-600" /> : <X className="h-5 w-5 flex-shrink-0 mt-0.5 text-rose-600" />}
-                <p className="font-medium text-sm md:text-base">{message.text}</p>
+                <p className="font-medium text-sm">{message.text}</p>
               </div>
             )}
 
-            {(!isOnline || pendingQueueCount > 0) && (
-              <div className="flex flex-col gap-3 rounded-2xl border border-amber-200/60 bg-amber-50 p-4 text-amber-900 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  {isOnline ? <CloudOff className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" /> : <WifiOff className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />}
-                  <div>
-                    <p className="font-semibold text-amber-900">
-                      {isOnline
-                        ? `${pendingQueueCount} pendência(s) aguardando sincronização.`
-                        : 'Você está offline. As contagens serão salvas localmente.'}
-                    </p>
-                    <p className="text-sm text-amber-700/80 mt-0.5">
-                      {isOnline
-                        ? 'Use o botão abaixo para forçar a sincronização ou aguarde o envio automático.'
-                        : 'Quando a conexão voltar, o sistema vai sincronizar automaticamente e conferir o resultado.'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => flushOfflineQueue({ manual: true })}
-                  disabled={!isOnline || syncingQueue || pendingQueueCount === 0}
-                  className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 focus:ring-4 focus:ring-amber-500/20 disabled:opacity-50 transition-all"
-                >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${syncingQueue ? 'animate-spin' : ''}`} />
-                  Sincronizar
-                </button>
-              </div>
-            )}
-
-            {lastSyncReport && !lastSyncReport.verified && lastSyncReport.status !== 'syncing' && lastSyncReport.status !== 'offline' && (
-              <div className="rounded-2xl border border-rose-200/70 bg-rose-50 p-4 text-rose-900 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-rose-600" />
-                  <div>
-                    <p className="font-semibold">Atenção na sincronização</p>
-                    <p className="mt-1 text-sm text-rose-800/90">
-                      Nem todas as contagens foram confirmadas no sistema principal. Restam {lastSyncReport.failed || 0} pendência(s) na fila local.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {inventory?.etapa_contagem > 1 && (
-              <div className="rounded-2xl border border-indigo-200/60 bg-indigo-50/50 p-4 text-sm text-indigo-900 shadow-sm flex items-center gap-3">
-                <Filter className="h-5 w-5 text-indigo-600 flex-shrink-0" />
-                <p>Esta etapa exibe todos os itens na lista, mas apenas os divergentes ou pendentes podem ser recontados.</p>
-              </div>
-            )}
-
-            {activeTab === 'count' && (
-              <div className="rounded-2xl bg-cyan-600 px-5 py-5 text-white shadow-sm">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-100">Coletar produtos</p>
-                    <h1 className="mt-1 text-xl font-bold">Bipe primeiro, informe depois</h1>
-                    <p className="mt-1 text-sm text-cyan-50">Use o leitor ou a câmera para identificar a mercadoria e concluir a contagem rapidamente.</p>
-                  </div>
-                  <Barcode className="h-9 w-9 shrink-0 text-cyan-100" />
-                </div>
-              </div>
-            )}
+            {blockedQueueCount > 0 && <button type="button" onClick={() => flushOfflineQueue({ manual: true })} disabled={!isOnline || syncingQueue} className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-left text-xs font-semibold text-rose-800 disabled:opacity-60"><AlertCircle className="h-4 w-4 shrink-0" />{blockedQueueCount} contagem(ns) precisam de revisão. Toque para tentar novamente.</button>}
 
             {activeTab === 'count' && (
               <section className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Modo de leitura">
@@ -1400,202 +1299,42 @@ export default function InventoryCount() {
                     className={`flex min-h-14 items-center gap-2 rounded-xl border px-3 text-left transition-colors ${scanMode === 'review' ? 'border-cyan-500 bg-cyan-50 text-cyan-900' : 'border-slate-200 text-slate-600'}`}
                   >
                     <ShieldCheck className="h-5 w-5 shrink-0" />
-                    <span><b className="block text-sm">Conferir</b><span className="text-[11px]">revisar quantidade</span></span>
+                    <b className="text-sm">Conferir</b>
                   </button>
                   <button
                     type="button"
                     onClick={() => setScanMode('auto')}
-                    disabled={inventory?.validade_obrigatoria}
                     className={`flex min-h-14 items-center gap-2 rounded-xl border px-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${scanMode === 'auto' ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-slate-200 text-slate-600'}`}
                   >
                     <Zap className="h-5 w-5 shrink-0" />
-                    <span><b className="block text-sm">Contínuo +1</b><span className="text-[11px]">salvar a cada bip</span></span>
+                    <b className="text-sm">Contínuo</b>
                   </button>
                 </div>
-                <p className="mt-2 px-1 text-xs text-slate-500">
-                  {inventory?.validade_obrigatoria
-                    ? 'O modo +1 fica desativado porque este inventário exige validade na primeira contagem.'
-                    : scanMode === 'auto'
-                      ? 'A câmera permanecerá aberta e cada código válido somará 1. Leituras repetidas acidentais são bloqueadas por alguns instantes.'
-                      : 'Cada leitura identifica o produto para você conferir quantidade, validade e observação antes de salvar.'}
-                </p>
               </section>
             )}
 
-            {/* Quick Scan Section (Mobile - flutuante com minimizar) */}
-            <div className={`${activeTab === 'count' ? 'lg:hidden' : 'hidden'} rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm`}>
-              <div className={`flex items-center justify-between ${isQuickScanMinimized ? '' : 'mb-4'}`}>
-                <h2 className="flex items-center text-xs font-bold uppercase tracking-widest text-slate-500">
-                  <Barcode className="mr-2 h-4 w-4" />
-                  Bipagem Rápida
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsScannerOpen(true)}
-                    className="flex items-center rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-bold text-indigo-600 transition-colors hover:text-indigo-800"
-                  >
-                    <Camera className="mr-1.5 h-4 w-4" />
-                    Câmera
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickScanMinimized((prev) => !prev)}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition-colors hover:bg-slate-50"
-                    title={isQuickScanMinimized ? 'Expandir bipagem rápida' : 'Minimizar bipagem rápida'}
-                  >
-                    {isQuickScanMinimized ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {!isQuickScanMinimized && (
-                <form onSubmit={handleQuickSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                  {quickProduct && <IdentifiedProductDetails item={quickProduct} />}
-                  <div className="group relative flex-1">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 transition-colors group-focus-within:text-indigo-500">
-                      <Search className="h-5 w-5" />
+            {activeTab === 'count' && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <form onSubmit={handleQuickSubmit} className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="relative min-w-0 flex-1">
+                      <Barcode className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                      <input ref={quickBarcodeInputRef} type="text" autoComplete="off" autoCapitalize="none" spellCheck={false} enterKeyHint="go" value={quickBarcode} onChange={(event) => { setQuickBarcode(event.target.value); setQuickProduct(null); }} aria-label="Código de barras, SKU ou referência" placeholder="Bipe ou digite o código" className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-3 text-base outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15" />
                     </div>
-                    <input
-                      ref={quickBarcodeInputRef}
-                       type="text"
-                       inputMode="text"
-                       autoComplete="off"
-                       autoCapitalize="none"
-                       spellCheck="false"
-                       enterKeyHint="go"
-                      value={quickBarcode}
-                      onChange={(e) => {
-                        setQuickBarcode(e.target.value);
-                        setQuickProduct(null);
-                      }}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-11 pr-3 text-base font-medium text-slate-800 outline-none transition-all placeholder-slate-400 hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:text-lg"
-                      placeholder="Código, SKU ou REF..."
-                    />
+                    <button type="button" onClick={() => { setCameraEntry(false); setIsScannerOpen(true); }} aria-label="Ler código pela câmera" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white transition-colors hover:bg-slate-700"><Camera className="h-5 w-5" /></button>
                   </div>
-                  <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      required={inventory?.validade_obrigatoria}
-                      value={quickValidade}
-                      onChange={(e) => setQuickValidade(formatValidityInput(e.target.value))}
-                      placeholder="DD/MM/AAAA"
-                      maxLength={10}
-                      className="min-w-[120px] flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-3 text-base text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-40 sm:text-lg"
-                      title={inventory?.validade_obrigatoria ? "Validade (Obrigatório)" : "Validade (Opcional)"}
-                    />
-                    <input
-                      type="text"
-                      value={quickObservacao}
-                      onChange={(e) => setQuickObservacao(e.target.value)}
-                      placeholder="Obs (Opcional)"
-                      className="min-w-[120px] flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-3 text-sm text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-40 sm:text-base"
-                    />
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={quickQuantity}
-                      onChange={(e) => setQuickQuantity(formatQuantityInput(e.target.value, quickProduct?.Produto?.unidade_medida))}
-                      aria-label="Quantidade"
-                      className="w-20 rounded-xl border border-slate-200 bg-slate-50/50 py-3 text-center text-base font-bold text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-24 sm:text-lg"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSubmittingQuick || !quickBarcode}
-                      className="min-w-[100px] flex flex-1 items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-indigo-600/20 transition-all hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:opacity-50 active:scale-[0.98] sm:flex-none sm:px-8 sm:text-base"
-                    >
-                      {isSubmittingQuick ? <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div> : quickProduct ? 'Salvar' : 'Identificar'}
-                    </button>
-                  </div>
+                  {quickProduct && !isScannerOpen ? renderQuantityFields() : <button type="submit" disabled={identifyingProduct || !quickBarcode || isScannerOpen} className="min-h-12 w-full rounded-xl bg-teal-700 px-4 text-sm font-bold text-white disabled:opacity-50">{identifyingProduct ? 'Identificando...' : 'Identificar produto'}</button>}
                 </form>
-              )}
-            </div>
-
-            {/* Quick Scan Section (Desktop - fixo na página) */}
-            <div className={`${activeTab === 'count' ? 'hidden lg:block' : 'hidden'} rounded-2xl border border-slate-200 bg-white p-5 shadow-sm`}>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="flex items-center text-xs font-bold uppercase tracking-widest text-slate-500">
-                  <Barcode className="mr-2 h-4 w-4" />
-                  Bipagem Rápida
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsScannerOpen(true)}
-                  className="flex items-center rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-bold text-indigo-600 transition-colors hover:text-indigo-800"
-                >
-                  <Camera className="mr-1.5 h-4 w-4" />
-                  Câmera
-                </button>
-              </div>
-              <form onSubmit={handleQuickSubmit} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                {quickProduct && <IdentifiedProductDetails item={quickProduct} />}
-                <div className="group relative flex-1">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400 transition-colors group-focus-within:text-indigo-500">
-                    <Search className="h-5 w-5" />
-                  </div>
-                  <input
-                    ref={quickBarcodeInputRef}
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    autoCapitalize="none"
-                    spellCheck="false"
-                    enterKeyHint="go"
-                    value={quickBarcode}
-                    onChange={(e) => {
-                      setQuickBarcode(e.target.value);
-                      setQuickProduct(null);
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 pl-11 pr-3 text-base font-medium text-slate-800 outline-none transition-all placeholder-slate-400 hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:text-lg"
-                    placeholder="Código, SKU ou REF..."
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    required={inventory?.validade_obrigatoria}
-                    value={quickValidade}
-                    onChange={(e) => setQuickValidade(formatValidityInput(e.target.value))}
-                    placeholder="DD/MM/AAAA"
-                    maxLength={10}
-                    className="min-w-[120px] flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-3 text-base text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-40 sm:text-lg"
-                    title={inventory?.validade_obrigatoria ? "Validade (Obrigatório)" : "Validade (Opcional)"}
-                  />
-                  <input
-                    type="text"
-                    value={quickObservacao}
-                    onChange={(e) => setQuickObservacao(e.target.value)}
-                    placeholder="Obs (Opcional)"
-                    className="min-w-[120px] flex-1 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-3 text-sm text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-40 sm:text-base"
-                  />
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={quickQuantity}
-                    onChange={(e) => setQuickQuantity(formatQuantityInput(e.target.value, quickProduct?.Produto?.unidade_medida))}
-                    aria-label="Quantidade"
-                    className="w-20 rounded-xl border border-slate-200 bg-slate-50/50 py-3 text-center text-base font-bold text-slate-800 outline-none transition-all hover:bg-slate-50 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/20 sm:w-24 sm:text-lg"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isSubmittingQuick || !quickBarcode}
-                    className="min-w-[100px] flex flex-1 items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-md shadow-indigo-600/20 transition-all hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 disabled:opacity-50 active:scale-[0.98] sm:flex-none sm:px-8 sm:text-base"
-                  >
-                    {isSubmittingQuick ? <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-white"></div> : quickProduct ? 'Salvar' : 'Identificar'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              </section>
+            )}
 
             {activeTab === 'count' && recentScans.length > 0 && (
               <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500">Últimas leituras neste aparelho</h2>
-                  <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700">Protegidas</span>
-                </div>
-                <ul className="divide-y divide-slate-100">
+                <button type="button" onClick={() => setRecentScansOpen((open) => !open)} aria-expanded={recentScansOpen} aria-controls="recent-device-scans" className="flex min-h-12 w-full items-center justify-between gap-2 px-4 py-3 text-left">
+                  <h2 className="text-xs font-semibold text-slate-500">Últimas leituras neste aparelho <span className="ml-1 text-slate-400">({recentScans.length})</span></h2>
+                  {recentScansOpen ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                </button>
+                {recentScansOpen && <ul id="recent-device-scans" className="divide-y divide-slate-100 border-t border-slate-100">
                   {recentScans.map((scan) => (
                     <li key={scan.id} className="flex items-center justify-between gap-3 px-4 py-3">
                       <div className="min-w-0">
@@ -1604,11 +1343,11 @@ export default function InventoryCount() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="text-sm font-black text-emerald-700">{scan.quantity > 0 ? '+' : ''}{scan.quantity}</p>
-                        <p className="text-[10px] font-semibold uppercase text-slate-400">{scan.offline ? 'fila offline' : 'fila de envio'}</p>
+                        <p className="text-[10px] font-semibold uppercase text-slate-400">{getInventoryQueue().some((item) => item.localId === scan.id) ? 'No aparelho' : 'Enviado'}</p>
                       </div>
                     </li>
                   ))}
-                </ul>
+                </ul>}
               </section>
             )}
 
@@ -1862,12 +1601,15 @@ export default function InventoryCount() {
 
       <ScannerModal 
         isOpen={isScannerOpen} 
-        onClose={() => setIsScannerOpen(false)} 
+        onClose={() => { setIsScannerOpen(false); setCameraEntry(false); }}
         onScan={handleScanComplete}
-        continuous={scanMode === 'auto' && !inventory?.validade_obrigatoria}
-        title={scanMode === 'auto' ? 'Contagem contínua +1' : 'Identificar produto'}
-      />
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-4 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+        continuous={scanMode === 'auto'}
+        paused={cameraEntry}
+        title={scanMode === 'auto' ? 'Contagem contínua' : 'Identificar produto'}
+      >
+        {cameraEntry && quickProduct && <form onSubmit={handleQuickSubmit} className="min-h-0 max-h-full w-full overflow-y-auto overscroll-contain rounded-t-3xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"><div className="mb-4 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal-700">Produto identificado</p><button type="button" onClick={() => { setCameraEntry(false); setQuickProduct(null); setQuickBarcode(''); setMessage({ text: '', type: '' }); }} className="min-h-10 px-3 text-xs font-semibold text-slate-500">Cancelar</button></div>{renderQuantityFields()}</form>}
+      </ScannerModal>
+      <nav className={`${keyboardOpen ? 'hidden' : 'fixed'} inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 px-4 py-2 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur`}>
         <div className="mx-auto grid w-full max-w-md grid-cols-2 gap-2">
           <button
             type="button"

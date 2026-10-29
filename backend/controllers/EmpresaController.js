@@ -2,7 +2,7 @@ const Empresa = require('../models/Empresa');
 
 exports.getAll = async (req, res) => {
   try {
-    const empresas = await Empresa.findAll();
+    const empresas = await Empresa.findAll({ where: { id: req.user.empresa_id } });
     res.json(empresas);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -11,7 +11,8 @@ exports.getAll = async (req, res) => {
 
 exports.getById = async (req, res) => {
   try {
-    const empresa = await Empresa.findByPk(req.params.id);
+    if (Number(req.params.id) !== Number(req.user.empresa_id)) return res.status(404).json({ error: 'Empresa não encontrada' });
+    const empresa = await Empresa.findByPk(req.user.empresa_id);
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
     res.json(empresa);
   } catch (error) {
@@ -30,10 +31,12 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    if (Number(req.params.id) !== Number(req.user.empresa_id)) return res.status(404).json({ error: 'Empresa não encontrada' });
     const empresa = await Empresa.findByPk(req.params.id);
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-    await empresa.update(req.body);
+    const { nome, cnpj } = req.body;
+    await empresa.update({ nome, cnpj });
     res.json(empresa);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -42,6 +45,7 @@ exports.update = async (req, res) => {
 
 exports.delete = async (req, res) => {
   try {
+    if (Number(req.params.id) !== Number(req.user.empresa_id)) return res.status(404).json({ error: 'Empresa não encontrada' });
     const empresa = await Empresa.findByPk(req.params.id);
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
     

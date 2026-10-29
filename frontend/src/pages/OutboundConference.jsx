@@ -202,7 +202,6 @@ export default function OutboundConference() {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('outboundUpdate', handleOutboundUpdate);
-      socket.disconnect();
     };
   }, [id, loadCarga]);
 
@@ -287,27 +286,32 @@ export default function OutboundConference() {
 
     if (!code) {
       setMessage({ type: 'error', text: 'Bipe ou informe o código da mercadoria.' });
-      return;
+      return { accepted: false, keepOpen: true, message: 'Código vazio. Tente novamente.' };
     }
     if (!matches.length) {
       setMessage({ type: 'error', text: 'Esta mercadoria não pertence à carga selecionada.' });
       window.setTimeout(() => codeInputRef.current?.select(), 0);
-      return;
+      return { accepted: false, keepOpen: true, message: 'Mercadoria não encontrada nesta carga.' };
     }
     if (matches.length > 1) {
       setMessage({ type: 'error', text: 'O código existe em mais de uma unidade. Selecione abaixo a unidade que está sendo conferida.' });
-      return;
+      return { accepted: false, keepOpen: true, message: 'Código encontrado em mais de uma unidade.' };
     }
     if (isRecountTask && matches[0].recontado_em) {
       setMessage({ type: 'error', text: 'Este item já foi recontado nesta tarefa.' });
-      return;
+      return { accepted: false, keepOpen: true, message: 'Este item já foi recontado.' };
     }
     if (!isRecountTask && ['conferido', 'sobra'].includes(matches[0].status)) {
       setMessage({ type: 'error', text: matches[0].status === 'conferido' ? 'Esta mercadoria já foi totalmente conferida.' : 'Esta mercadoria está com sobra e precisa de ajuste.' });
-      return;
+      return {
+        accepted: false,
+        keepOpen: true,
+        message: matches[0].status === 'conferido' ? 'Mercadoria já totalmente conferida.' : 'Mercadoria com sobra; faça um ajuste.'
+      };
     }
     setMessage(null);
     window.setTimeout(() => quantityInputRef.current?.focus(), 0);
+    return { accepted: true, message: `${matches[0].descricao} identificada.` };
   }
 
   async function handleSubmit(event) {
@@ -536,6 +540,6 @@ export default function OutboundConference() {
         </>}
       </div>
     </main>
-    <ScannerModal isOpen={scannerOpen} onClose={() => setScannerOpen(false)} onScan={(code) => { acceptCode(code); return true; }} />
+    <ScannerModal isOpen={scannerOpen} onClose={() => setScannerOpen(false)} onScan={acceptCode} />
   </div>;
 }

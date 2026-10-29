@@ -16,6 +16,7 @@ import {
 import api from '../services/api';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
+import { hasModule } from '../utils/userModules';
 
 const stepItems = [
   { step: 1, title: 'Informações', description: 'Defina nome, data e contexto', icon: Package },
@@ -46,7 +47,7 @@ export default function CreateInventory() {
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [addingUser, setAddingUser] = useState(false);
-  const [newUser, setNewUser] = useState({ nome: '', email: '', senha: '', nivel_acesso: 'operador' });
+  const [newUser, setNewUser] = useState({ nome: '', email: '', senha: '', nivel_acesso: 'operador', modulos: ['inventario'] });
   const [file, setFile] = useState(null);
   const [uploadedFilename, setUploadedFilename] = useState('');
   const [excelHeaders, setExcelHeaders] = useState([]);
@@ -96,7 +97,7 @@ export default function CreateInventory() {
       const createdUserId = response.data.id || response.data.usuario?.id;
       
       setShowAddUserModal(false);
-      setNewUser({ nome: '', email: '', senha: '', nivel_acesso: 'operador' });
+      setNewUser({ nome: '', email: '', senha: '', nivel_acesso: 'operador', modulos: ['inventario'] });
       await loadUsers();
       
       if (createdUserId) {
@@ -394,9 +395,11 @@ export default function CreateInventory() {
     </div>
   );
 
-  const filteredUsers = users.filter((user) => 
-    user.nome.toLowerCase().includes(userSearchTerm.toLowerCase()) || 
-    user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+  const filteredUsers = users.filter((user) =>
+    hasModule(user, 'inventario') && (
+      user.nome.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+    )
   );
 
   const renderStep2 = () => (

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<roteirizacaoCarga versao="1.0">
+  <identificacao>
+    <codigoRoteirizacao>ROT-20260827-0001</codigoRoteirizacao>
+    <codigoExportacao>AC-TESTE-NFE-9876</codigoExportacao>
+    <geradoEm>2026-08-27T14:20:00-03:00</geradoEm>
+    <sistemaOrigem>ROTEIRIZADOR TESTE</sistemaOrigem>
+    <ambiente>HOMOLOGACAO</ambiente>
+  </identificacao>
+  <transportadora>
+    <cnpj>11222333000181</cnpj>
+    <razaoSocial>TRANSPORTADORA ROTA CERTA LTDA</razaoSocial>
+    <nomeFantasia>ROTA CERTA</nomeFantasia>
+    <telefone>1934005000</telefone>
+  </transportadora>
+  <rota>
+    <codigoRota>R-SP-INT-001</codigoRota>
+    <descricao>CAMPINAS - REGIAO CENTRAL</descricao>
+    <dataSaida>2026-08-28</dataSaida>
+    <horaPrevistaSaida>07:00:00</horaPrevistaSaida>
+    <distanciaTotalKm>42.500</distanciaTotalKm>
+    <tempoEstimadoMinutos>95</tempoEstimadoMinutos>
+    <pesoTotalKg>1953.000</pesoTotalKg>
+    <quantidadeTotalVolumes>91</quantidadeTotalVolumes>
+    <valorTotalCarga>11541.80</valorTotalCarga>
+  </rota>
+  <veiculo>
+    <placa>ABC1D23</placa>
+    <tipoVeiculo>TRUCK BAU</tipoVeiculo>
+    <capacidadePesoKg>14000.000</capacidadePesoKg>
+    <capacidadeVolumes>600</capacidadeVolumes>
+    <motorista>
+      <codigo>MOT-001</codigo>
+      <nome>CARLOS EDUARDO DA SILVA</nome>
+      <cpf>12345678909</cpf>
+      <telefone>11999990001</telefone>
+    </motorista>
+  </veiculo>
+  <entregas>
+    <entrega sequencia="1">
+      <codigoEntrega>ENT-20260828-0001</codigoEntrega>
+      <pedido>PED-TESTE-2026-001</pedido>
+      <notaFiscal>
+        <numero>9876</numero>
+        <serie>1</serie>
+        <chaveAcesso>35260812345678000195550010000098761123456783</chaveAcesso>
+        <dataEmissao>2026-08-27T08:30:00-03:00</dataEmissao>
+        <valorNota>11541.80</valorNota>
+        <pesoBrutoKg>1953.000</pesoBrutoKg>
+        <quantidadeVolumes>91</quantidadeVolumes>
+      </notaFiscal>
+      <destinatario>
+        <cnpj>98765432000198</cnpj>
+        <razaoSocial>ARMAZENA CERTO OPERACOES LOGISTICAS LTDA</razaoSocial>
+        <nomeFantasia>ARMAZENA CERTO</nomeFantasia>
+        <telefone>1932004000</telefone>
+        <endereco>
+          <logradouro>RUA DO ARMAZEM</logradouro>
+          <numero>500</numero>
+          <complemento>DOCA 04</complemento>
+          <bairro>PARQUE LOGISTICO</bairro>
+          <municipio>CAMPINAS</municipio>
+          <uf>SP</uf>
+          <cep>13050000</cep>
+          <latitude>-22.909938</latitude>
+          <longitude>-47.062633</longitude>
+        </endereco>
+      </destinatario>
+      <janelaEntrega>
+        <inicio>2026-08-28T08:00:00-03:00</inicio>
+        <fim>2026-08-28T11:30:00-03:00</fim>
+      </janelaEntrega>
+      <cubagem>
+        <volumeM3>12.840</volumeM3>
+        <pesoCubadoKg>2140.000</pesoCubadoKg>
+      </cubagem>
+      <observacoes>ENTREGAR NA DOCA 04. SOLICITAR CONFERENCIA POR CODIGO DE BARRAS.</observacoes>
+      <produtos>
+        <produto sequencia="1">
+          <codigoProduto>MP-001</codigoProduto><codigoBarras>7891000000014</codigoBarras><descricao>ARROZ BRANCO TIPO 1 SACO 25 KG</descricao><unidade>SC</unidade><quantidade>12.000</quantidade><quantidadeVolumes>12</quantidadeVolumes><pesoLiquidoKg>300.000</pesoLiquidoKg><pesoBrutoKg>306.000</pesoBrutoKg><valorUnitario>128.50</valorUnitario><valorTotal>1542.00</valorTotal><lote>ARR260801</lote><validade>2027-08-01</validade>
+        </produto>
+        <produto sequencia="2">
+          <codigoProduto>MP-002</codigoProduto><codigoBarras>7891000000021</codigoBarras><descricao>ACUCAR CRISTAL SACO 50 KG</descricao><unidade>SC</unidade><quantidade>8.000</quantidade><quantidadeVolumes>8</quantidadeVolumes><pesoLiquidoKg>400.000</pesoLiquidoKg><pesoBrutoKg>406.000</pesoBrutoKg><valorUnitario>189.90</valorUnitario><valorTotal>1519.20</valorTotal><lote>ACU260815</lote><validade>2028-08-15</validade>
+        </produto>
+        <produto sequencia="3">
+          <codigoProduto>MP-003</codigoProduto><codigoBarras>7891000000038</codigoBarras><descricao>FARINHA DE TRIGO ESPECIAL SACO 25 KG</descricao><unidade>SC</unidade><quantidade>10.000</quantidade><quantidadeVolumes>10</quantidadeVolumes><pesoLiquidoKg>250.000</pesoLiquidoKg><pesoBrutoKg>256.000</pesoBrutoKg><valorUnitario>96.75</valorUnitario><valorTotal>967.50</valorTotal><lote>FAR260820</lote><validade>2027-02-20</validade>
+        </produto>
+        <produto sequencia="4">
+          <codigoProduto>MP-004</codigoProduto><codigoBarras>7891000000045</codigoBarras><descricao>OLEO DE SOJA CAIXA 20 X 900 ML</descricao><unidade>CX</unidade><quantidade>15.000</quantidade><quantidadeVolumes>15</quantidadeVolumes><pesoLiquidoKg>270.000</pesoLiquidoKg><pesoBrutoKg>280.000</pesoBrutoKg><valorUnitario>169.80</valorUnitario><valorTotal>2547.00</valorTotal><lote>OLE260810</lote><validade>2027-08-10</validade>
+        </produto>
+        <produto sequencia="5">
+          <codigoProduto>MP-005</codigoProduto><codigoBarras>7891000000052</codigoBarras><descricao>FEIJAO CARIOCA TIPO 1 SACO 30 KG</descricao><unidade>SC</unidade><quantidade>6.000</quantidade><quantidadeVolumes>6</quantidadeVolumes><pesoLiquidoKg>180.000</pesoLiquidoKg><pesoBrutoKg>185.000</pesoBrutoKg><valorUnitario>214.90</valorUnitario><valorTotal>1289.40</valorTotal><lote>FEI260805</lote><validade>2027-08-05</validade>
+        </produto>
+        <produto sequencia="6">
+          <codigoProduto>MP-006</codigoProduto><codigoBarras>7891000000069</codigoBarras><descricao>LEITE INTEGRAL UHT CAIXA 12 X 1 L</descricao><unidade>CX</unidade><quantidade>20.000</quantidade><quantidadeVolumes>20</quantidadeVolumes><pesoLiquidoKg>240.000</pesoLiquidoKg><pesoBrutoKg>250.000</pesoBrutoKg><valorUnitario>67.20</valorUnitario><valorTotal>1344.00</valorTotal><lote>LEI260825</lote><validade>2027-02-25</validade>
+        </produto>
+        <produto sequencia="7">
+          <codigoProduto>MP-007</codigoProduto><codigoBarras>7891000000076</codigoBarras><descricao>SAL REFINADO FARDO 30 X 1 KG</descricao><unidade>FD</unidade><quantidade>5.000</quantidade><quantidadeVolumes>5</quantidadeVolumes><pesoLiquidoKg>150.000</pesoLiquidoKg><pesoBrutoKg>154.000</pesoBrutoKg><valorUnitario>72.50</valorUnitario><valorTotal>362.50</valorTotal><lote>SAL260801</lote><validade>2029-08-01</validade>
+        </produto>
+        <produto sequencia="8">
+          <codigoProduto>MP-008</codigoProduto><codigoBarras>7891000000083</codigoBarras><descricao>CAFE TORRADO E MOIDO CAIXA 20 X 500 G</descricao><unidade>CX</unidade><quantidade>4.000</quantidade><quantidadeVolumes>4</quantidadeVolumes><pesoLiquidoKg>40.000</pesoLiquidoKg><pesoBrutoKg>43.000</pesoBrutoKg><valorUnitario>298.00</valorUnitario><valorTotal>1192.00</valorTotal><lote>CAF260812</lote><validade>2027-08-12</validade>
+        </produto>
+        <produto sequencia="9">
+          <codigoProduto>MP-009</codigoProduto><codigoBarras>7891000000090</codigoBarras><descricao>EMBALAGEM DE PAPELAO FARDO 100 UNIDADES</descricao><unidade>FD</unidade><quantidade>3.000</quantidade><quantidadeVolumes>3</quantidadeVolumes><pesoLiquidoKg>24.000</pesoLiquidoKg><pesoBrutoKg>28.000</pesoBrutoKg><valorUnitario>145.00</valorUnitario><valorTotal>435.00</valorTotal><lote>EMB260801</lote><validade>2031-08-01</validade>
+        </produto>
+        <produto sequencia="10">
+          <codigoProduto>MP-010</codigoProduto><codigoBarras>7891000000106</codigoBarras><descricao>DETERGENTE ALCALINO BOMBONA 5 L</descricao><unidade>UN</unidade><quantidade>8.000</quantidade><quantidadeVolumes>8</quantidadeVolumes><pesoLiquidoKg>40.000</pesoLiquidoKg><pesoBrutoKg>45.000</pesoBrutoKg><valorUnitario>42.90</valorUnitario><valorTotal>343.20</valorTotal><lote>DET260821</lote><validade>2028-08-21</validade>
+        </produto>
+      </produtos>
+    </entrega>
+  </entregas>
+</roteirizacaoCarga>

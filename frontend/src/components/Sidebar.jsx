@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { hasModule } from '../utils/userModules';
 import {
   LayoutDashboard,
   Package,
@@ -31,18 +32,25 @@ export default function Sidebar() {
   }, [collapsed]);
 
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', available: true, roles: ['admin', 'gerente'] },
-    { icon: BarChart3, label: 'Prestação de contas', path: '/prestacao-contas', available: true, roles: ['admin', 'gerente'] },
-    { icon: ClipboardList, label: 'Inventários', path: '/inventarios', available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'] },
-    { icon: Truck, label: 'Inbound / Recebimento', path: '/conferencia/inbound', available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'] },
-    { icon: Truck, label: ['operador', 'admin_inventario'].includes(user?.nivel_acesso) ? 'Minhas cargas Outbound' : 'Outbound / Expedição', path: ['operador', 'admin_inventario'].includes(user?.nivel_acesso) ? '/conferencia/outbound/minhas-cargas' : '/conferencia/outbound', excludePrefixes: ['/conferencia/outbound/retornos'], available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'] },
-    { icon: RotateCcw, label: 'Retornos Outbound', path: '/conferencia/outbound/retornos', available: true, roles: ['admin', 'gerente'] },
-    { icon: Users, label: 'Usuários', path: '/usuarios', available: true, roles: ['admin'] },
-    { icon: Package, label: 'Produtos', path: '/produtos', available: false, roles: ['admin', 'gerente'] },
+    { icon: Package, label: 'Módulos', path: '/modulos', available: true, group: 'Plataforma' },
+    { icon: LayoutDashboard, label: 'Painel de Inventário', path: '/dashboard', available: true, roles: ['admin', 'gerente'], module: 'inventario' },
+    { icon: ClipboardList, label: 'Inventário', path: '/inventarios', available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'], module: 'inventario' },
+    { icon: Truck, label: 'Recebimento', path: '/conferencia/inbound', available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'], module: 'cross_docking' },
+    { icon: Truck, label: ['operador', 'admin_inventario'].includes(user?.nivel_acesso) ? 'Minhas cargas' : 'Expedição', path: ['operador', 'admin_inventario'].includes(user?.nivel_acesso) ? '/conferencia/outbound/minhas-cargas' : '/conferencia/outbound', excludePrefixes: ['/conferencia/outbound/retornos'], available: true, roles: ['admin', 'gerente', 'operador', 'admin_inventario'], module: 'cross_docking' },
+    { icon: RotateCcw, label: 'Retornos da Expedição', path: '/conferencia/outbound/retornos', available: true, roles: ['admin', 'gerente'], module: 'cross_docking' },
+    { icon: BarChart3, label: 'Prestação de contas', path: '/prestacao-contas', available: true, roles: ['admin', 'gerente'], module: 'cross_docking' },
+    { icon: Users, label: 'Usuários e permissões', path: '/usuarios', available: true, roles: ['admin'] },
+    { icon: Package, label: 'Produtos', path: '/produtos', available: false, roles: ['admin', 'gerente'], module: 'inventario' },
     { icon: Settings, label: 'Configurações', path: '/configuracoes', available: false, roles: ['admin'] },
   ];
 
-  const visibleMenuItems = menuItems.filter((item) => !item.roles || item.roles.includes(user?.nivel_acesso));
+  const visibleMenuItems = menuItems.map((item) => ({
+    ...item,
+    group: item.group || (item.module === 'inventario' ? 'Inventário' : item.module ? 'Cross Docking' : 'Administração')
+  })).filter((item) =>
+    item.available && (!item.roles || item.roles.includes(user?.nivel_acesso))
+    && (!item.module || hasModule(user, item.module))
+  );
 
   const isActive = (item) => {
     if (item.excludePrefixes?.some((prefix) => location.pathname.startsWith(prefix))) return false;
@@ -162,7 +170,7 @@ export default function Sidebar() {
         )}
 
         <div className="space-y-2">
-          {visibleMenuItems.map((item) => {
+          {visibleMenuItems.map((item, index) => {
             const active = item.available && isActive(item);
             const baseClass =
               'group flex items-center rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200';
@@ -188,6 +196,10 @@ export default function Sidebar() {
             }
 
             return (
+              <Fragment key={item.path}>
+              {!collapsed && visibleMenuItems[index - 1]?.group !== item.group && (
+                <p className="px-3 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{item.group}</p>
+              )}
               <Link
                 key={item.path}
                 to={item.path}
@@ -206,6 +218,7 @@ export default function Sidebar() {
                 />
                 {!collapsed && <span className="flex-1">{item.label}</span>}
               </Link>
+              </Fragment>
             );
           })}
         </div>

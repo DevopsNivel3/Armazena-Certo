@@ -111,13 +111,14 @@ export async function fetchAllProducts(token: string, inventoryId: number) {
 }
 
 export async function submitCount(token: string, item: {
-  inventoryId: number; localId: string; code: string; quantity: number;
+  inventoryId: number; localId: string; code: string; quantity: number; productId?: number;
   validity?: string | null; observation?: string | null; location?: string | null;
 }) {
   return request(`/inventories/${item.inventoryId}/contagem`, {
     method: 'POST',
     body: JSON.stringify({
       codigo_barras: item.code,
+      produto_id: item.productId,
       quantidade_contada: item.quantity,
       validade: item.validity || undefined,
       observacao: item.observation || undefined,

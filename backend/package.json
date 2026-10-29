@@ -16,6 +16,7 @@
     "migrate:expedicao-recontagem": "node migrate_expedicao_recontagem.js",
     "migrate:expedicao-retorno": "node migrate_expedicao_retorno.js",
     "migrate:conferencia-finalizacao": "node migrate_conferencia_finalizacao.js",
+    "migrate:modulos": "node migrate_modulos_usuario.js",
     "test": "node --test",
     "test:outbound": "node --test test/roteirizacaoXmlParser.test.js"
   },

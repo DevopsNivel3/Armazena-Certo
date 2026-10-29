@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { extractRouteXml } = require('../services/roteirizacaoXmlParser');
 const { parseNFeItems } = require('../services/nfeParser');
 const { getIO, getOutboundUserConnectionStatus } = require('../socket');
+const { hasUserModule } = require('../constants/userModules');
 
 const roundQuantity = (value) => Math.round((Number(value) + Number.EPSILON) * 1000) / 1000;
 const DISCRETE_UNITS = new Set(['UN', 'UND', 'UNID', 'PC', 'PÇ', 'CX', 'CAIXA', 'FD', 'FARDO', 'PCT', 'PACOTE', 'KIT']);
@@ -32,7 +33,7 @@ function emitOutboundUpdate({ empresaId, usuarioIds = [], event }) {
     const io = getIO();
     io.to(`empresa_${empresaId}_outbound_managers`).emit('outboundUpdate', event);
     [...new Set(usuarioIds.filter(Boolean).map(String))].forEach((usuarioId) => {
-      io.to(`usuario_${usuarioId}`).emit('outboundUpdate', event);
+      io.to(`usuario_${usuarioId}_cross_docking`).emit('outboundUpdate', event);
     });
   } catch (error) {
     console.warn('Não foi possível emitir atualização Outbound:', error.message);
@@ -583,13 +584,13 @@ exports.listarUsuariosConferencia = async (req, res) => {
     if (!carga) return res.status(404).json({ message: 'Carga de expedição não encontrada.' });
     const usuarios = await Usuario.findAll({
       where: { empresa_id: req.user.empresa_id, nivel_acesso: ['operador', 'admin_inventario'] },
-      attributes: ['id', 'nome', 'email', 'nivel_acesso'],
+      attributes: ['id', 'nome', 'email', 'nivel_acesso', 'modulos'],
       order: [['nome', 'ASC']]
     });
     const connectionStatus = getOutboundUserConnectionStatus(req.user.empresa_id);
     return res.json({
       conferente_usuario_id: carga.conferente_usuario_id || null,
-      usuarios: usuarios.map((usuario) => ({
+      usuarios: usuarios.filter((usuario) => hasUserModule(usuario, 'cross_docking')).map((usuario) => ({
         ...usuario.toJSON(),
         ...(connectionStatus.get(String(usuario.id)) || { online: false, aparelhos_conectados: 0, ultima_conexao_em: null })
       }))
@@ -688,7 +689,7 @@ exports.atribuirConferente = async (req, res) => {
 
     if (usuarioId) {
       const usuario = await Usuario.findOne({ where: { id: usuarioId, empresa_id: req.user.empresa_id } });
-      if (!usuario || !['operador', 'admin_inventario'].includes(usuario.nivel_acesso)) {
+      if (!usuario || !['operador', 'admin_inventario'].includes(usuario.nivel_acesso) || !hasUserModule(usuario, 'cross_docking')) {
         return res.status(400).json({ message: 'Selecione um operador válido da empresa.' });
       }
     }
@@ -794,7 +795,7 @@ exports.atribuirRecontagem = async (req, res) => {
         throw error;
       }
       const usuario = await Usuario.findOne({ where: { id: usuarioId, empresa_id: req.user.empresa_id }, transaction });
-      if (!usuario || !['operador', 'admin_inventario'].includes(usuario.nivel_acesso)) {
+      if (!usuario || !['operador', 'admin_inventario'].includes(usuario.nivel_acesso) || !hasUserModule(usuario, 'cross_docking')) {
         const error = new Error('Selecione um conferente válido da empresa.');
         error.statusCode = 400;
         throw error;

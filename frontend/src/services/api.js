@@ -20,4 +20,12 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use((response) => response, (error) => {
+  if (error.response?.data?.code === 'MODULE_ACCESS_DENIED'
+    || (error.response?.status === 401 && !error.config?.url?.startsWith('/auth/'))) {
+    window.dispatchEvent(new Event('module-access-denied'));
+  }
+  return Promise.reject(error);
+});
+
 export default api;
